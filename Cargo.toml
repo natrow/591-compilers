@@ -1,5 +1,3 @@
 [workspace]
-members = [
-    "part0"
-]
+members = ["part0", "regex"]
 resolver = "2"
