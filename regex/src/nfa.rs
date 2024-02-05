@@ -7,6 +7,8 @@ use std::{
 use log::{debug, trace, warn};
 
 use crate::dfa::Dfa;
+pub use crate::Error;
+type Result<T, S, A> = core::result::Result<T, Error<S, A>>;
 
 #[derive(Debug)]
 /// Non-deterministic Finite Autamota.
@@ -23,21 +25,6 @@ pub struct Nfa<S, A> {
     accepting: HashSet<S>,
     alphabet: HashSet<A>,
 }
-
-#[derive(Debug, PartialEq, Eq)]
-/// Errors that can happen while evaluating a finite automata.
-pub enum Error<S, A> {
-    /// Found a state which was not in the set of states
-    UnknownState(S),
-    /// Found a symbol which was not in the alphabet
-    UnknownSymbol(A),
-    /// Found an accepting state which was not in the set of states
-    UnknownAcceptingState(S),
-    /// Found an initial state which was not in the set of states
-    UnknownInitialState(S),
-}
-
-type Result<T, S, A> = core::result::Result<T, Error<S, A>>;
 
 impl<S, A> Nfa<S, A>
 where
@@ -122,7 +109,7 @@ where
     }
 
     /// Returns all states reachable reachable through epsillon edges and an input symbol.
-    fn dfa_edge(&self, d: &HashSet<S>, c: &A) -> HashSet<S> {
+    pub fn dfa_edge(&self, d: &HashSet<S>, c: &A) -> HashSet<S> {
         trace!("finding dfa edge {:?}, {:?}", d, c);
         let r = self.e_closure(&self.union_edge(d, &Some(*c)));
         trace!("got {:?}", r);
@@ -150,32 +137,48 @@ where
         Ok(&d & &self.accepting)
     }
 
-    // /// Generates an equivalent DFA using subset construction.
-    // pub fn subset_construction(&self) -> Dfa<HashSet<S>, A> {
-    //     let mut states = vec![self.e_closure(&[self.initial].into())];
-    //     let mut trans = Vec::new();
+    pub fn construct_subsets(&self) -> Result<Dfa<usize, A>, usize, A> {
+        let mut states = vec![self.e_closure(&[self.initial].into())];
+        let mut trans = HashMap::new();
 
-    //     let mut p = 0;
-    //     let mut j = 0;
+        let mut j = 0;
 
-    //     while j <= p {
-    //         for c in self.alphabet.iter() {
-    //             let e = self.dfa_edge(&states[j], c);
-    //             if states.contains(&e) {
-    //                 trans.push((e, *c));
-    //             } else {
-    //                 p += 1;
-    //                 states.push(e.clone());
-    //                 trans.push((e, *c))
-    //             }
-    //         }
-    //         j += 1;
-    //     }
+        while j < states.len() {
+            for c in self.alphabet.iter() {
+                let e = self.dfa_edge(&states[j], c);
 
-    //     Dfa {
-    //         edges: HashMap::new(),
-    //         initial: states[0].clone(),
-    //         accepting: HashSet::new(),
-    //     }
-    // }
+                // don't add error states
+                if e.is_empty() {
+                    continue;
+                }
+
+                if let Some(i) = states.iter().position(|v| *v == e) {
+                    trans.insert((j, *c), i);
+                    trace!("inserting {} -> {} on {:?}", j, i, c);
+                } else {
+                    trace!("creating state {:?}", e);
+                    states.push(e);
+                    trace!("inserting {} -> {} on {:?}", j, states.len() - 1, c);
+                    trans.insert((j, *c), states.len() - 1);
+                }
+            }
+            j += 1;
+        }
+
+        debug!("created DFA with {} states", states.len());
+        for (k, v) in trans.iter() {
+            debug!("{} -> {} on {:?}", k.0, v, k.1);
+        }
+
+        let accepting = states
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| !s.is_disjoint(&self.accepting))
+            .map(|(i, _)| i)
+            .collect();
+
+        let states = (0..states.len()).collect();
+
+        Dfa::new(states, self.alphabet.clone(), trans, 0, accepting)
+    }
 }
