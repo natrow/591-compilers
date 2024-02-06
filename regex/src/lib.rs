@@ -1,6 +1,20 @@
+//! Regular expressions metalanguage:
+//! a (char)
+//! | (or)
+//! . (any)
+//! ^ (not)
+//! ? (maybe)
+//! * (repeating)
+//! + (at least one)
+//! () (group)
+//! [] (character class)
+//! \ (escape metalanguage)
+//! - (through)
+
 pub mod dfa;
 pub mod nfa;
 pub mod parser;
+pub mod scanner;
 
 #[derive(Debug, PartialEq, Eq)]
 /// Errors that can happen while evaluating a finite automata.
