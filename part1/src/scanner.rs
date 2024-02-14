@@ -1,4 +1,7 @@
-use std::io::{self, BufRead, Lines};
+use std::{
+    fmt::Display,
+    io::{self, BufRead, Lines},
+};
 
 pub mod token;
 use token::*;
@@ -12,7 +15,12 @@ use error::*;
 /// return a complete Error<T>, only the kind of error (or warning) that occurred.
 #[derive(Default, Clone)]
 struct ScannerFsm {
-    state: u8, // max: 34
+    /// Current state, represented as an 8-bit unsigned integer (max value: 34)
+    state: u8,
+    /// Current token being scanned, used to fill attribute fields
+    _token: String,
+    /// Current number of nested comment tags
+    _comment_level: usize,
 }
 
 impl ScannerFsm {
@@ -70,11 +78,19 @@ impl ScannerFsm {
 /// The `Lines<T>` buffer will normally buffer line-by-line which has better performance
 /// than individual calls to `File::read()`.
 pub struct Scanner<T: BufRead> {
+    /// File read buffer
     buffer: Lines<T>,
+    /// Current line being scanned
     line: String,
+    /// Number of line being scanned
     line_num: usize,
+    /// Position along the line being scanned
     line_index: usize,
+    /// Finite state machine that does actual scanning
+    ///
+    /// This is an `Option<T>` because after an error or EOF it is set to `None`
     fsm: Option<ScannerFsm>,
+    /// Whether or not to print debug information
     debug: bool,
 }
 
@@ -95,11 +111,11 @@ impl<T: BufRead> Scanner<T> {
         })
     }
 
-    fn handle_io_error(&mut self, e: io::Error) -> Error<ErrorKind> {
+    fn handle_io_error(&self, e: io::Error) -> Error<ErrorKind> {
         self.error(ErrorKind::Io(e))
     }
 
-    fn error(&self, kind: ErrorKind) -> Error<ErrorKind> {
+    fn error<E: Display>(&self, kind: E) -> Error<E> {
         Error::new(kind, self.line.clone(), self.line_num, self.line_index)
     }
 }
@@ -115,7 +131,16 @@ impl<T: BufRead> Iterator for Scanner<T> {
                     match fsm.step(c) {
                         Ok((t, w)) => {
                             if let Some(w) = w {
-                                eprintln!("[WARNING] {w}");
+                                // can't use self.error(w) here because of borrow checker semantics
+                                eprintln!(
+                                    "[WARNING] {}",
+                                    Error::new(
+                                        w,
+                                        self.line.clone(),
+                                        self.line_num,
+                                        self.line_index
+                                    )
+                                );
                             }
 
                             if let Some(t) = t {
@@ -148,7 +173,7 @@ impl<T: BufRead> Iterator for Scanner<T> {
             match self.fsm.take().unwrap().finish() {
                 Ok((t, w)) => {
                     if let Some(w) = w {
-                        eprintln!("[WARNING] {w}");
+                        eprintln!("[WARNING] {}", self.error(w));
                     }
 
                     if let Some(t) = t {
