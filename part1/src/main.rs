@@ -1,6 +1,8 @@
-use std::{fs::File, io::BufReader, path::PathBuf, process::ExitCode};
+use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Parser, ValueEnum};
+use colored::Colorize;
+
 use scanner::{
     error::{Error, ErrorKind},
     token::Token,
@@ -10,7 +12,7 @@ use scanner::{
 pub mod scanner;
 
 #[derive(Clone, PartialEq, Eq, Parser)]
-#[command(version, about)]
+#[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, value_enum)]
     debug: Option<DebugLevel>,
@@ -31,7 +33,7 @@ fn main() -> ExitCode {
 
     // if the list of input files is empty throw an error
     if args.input_files.is_empty() {
-        eprintln!("[ERROR] Missing input files!");
+        eprintln!("{} Missing input files!", "[ERROR]".red());
         return ExitCode::FAILURE;
     }
 
@@ -40,29 +42,24 @@ fn main() -> ExitCode {
     }
 
     for path in args.input_files {
-        if let Ok(file) = File::open(&path) {
-            let buf = BufReader::new(file);
-
-            if let Ok(scanner) = Scanner::new(
-                buf,
-                matches!(args.debug, Some(DebugLevel::All | DebugLevel::Scanner)),
-            ) {
-                match scanner.collect::<Result<Vec<Token>, Error<ErrorKind>>>() {
-                    Ok(tokens) => {
-                        if args.verbose {
-                            println!("scanned input file {:?}, tokens: {:#?}", path, tokens)
-                        }
+        match Scanner::new(
+            &path,
+            matches!(args.debug, Some(DebugLevel::All | DebugLevel::Scanner)),
+        ) {
+            Ok(scanner) => match scanner.collect::<Result<Vec<Token>, Error<ErrorKind>>>() {
+                Ok(tokens) => {
+                    if args.verbose {
+                        println!("scanned input file {:?}, tokens: {:#?}", path, tokens)
                     }
-                    Err(e) => eprintln!("[ERROR] {e}"),
                 }
-            } else {
-                eprintln!(
-                    "[WARN] I/O error occured while scanning file {:?}, skipping...",
-                    path
-                );
-            }
-        } else {
-            eprintln!("[WARN] Could not open file {:?}, skipping...", path);
+                Err(e) => eprintln!("{} {}", "[ERROR]".red(), e),
+            },
+            Err(e) => eprintln!(
+                "{} I/O error occured while scanning file {}: {}, skipping...",
+                "[WARNING]".yellow(),
+                path.to_string_lossy().purple(),
+                e.to_string().blue()
+            ),
         }
     }
 

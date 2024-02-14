@@ -1,5 +1,7 @@
 use std::{fmt::Display, io};
 
+use colored::Colorize;
+
 /// Error type for the scanner. Includes information about the kind of error and its location.
 ///
 /// This type is generic so that it can store both errors and warnings.
@@ -9,33 +11,43 @@ pub struct Error<T: Display> {
     line: String,
     line_num: usize,
     line_index: usize,
+    file_name: String,
 }
 
 impl<T: Display> Error<T> {
-    pub fn new(kind: T, line: String, line_num: usize, line_index: usize) -> Self {
+    pub fn new(
+        kind: T,
+        line: String,
+        line_num: usize,
+        line_index: usize,
+        file_name: String,
+    ) -> Self {
         Self {
             kind,
             line,
             line_num,
             line_index,
+            file_name,
         }
     }
 }
 
 impl<T: Display> Display for Error<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // [ERROR] unclosed comment on line 12:
-        //
+        // [ERROR] unclosed comment in test.c:12:34:
         // 123 "hello" /*
-        //              ^-- error happened here
+        //              ^~~ error happened here
 
         write!(
             f,
-            "{} on line {}:\n\n{}\n{}^-- error happened here\n",
+            "{} in {}:{}:{}:\n{}\n{}{}\n",
             self.kind,
-            self.line_num,
+            self.file_name.purple(),
+            self.line_num.to_string().purple(),
+            self.line_index.to_string().purple(),
             self.line,
-            " ".repeat(self.line_index)
+            " ".repeat(self.line_index),
+            "^~~ happened here".blue()
         )
     }
 }
@@ -90,7 +102,7 @@ pub enum WarningKind {
 impl Display for WarningKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            WarningKind::IllegalCharacter => "illegal character",
+            WarningKind::IllegalCharacter => "ignoring illegal character",
         };
 
         write!(f, "{}", str)

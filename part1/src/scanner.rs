@@ -1,7 +1,11 @@
 use std::{
     fmt::Display,
-    io::{self, BufRead, Lines},
+    fs::File,
+    io::{self, BufRead, BufReader, Lines},
+    path::Path,
 };
+
+use colored::Colorize;
 
 pub mod token;
 use token::*;
@@ -77,9 +81,9 @@ impl ScannerFsm {
 ///
 /// The `Lines<T>` buffer will normally buffer line-by-line which has better performance
 /// than individual calls to `File::read()`.
-pub struct Scanner<T: BufRead> {
+pub struct Scanner {
     /// File read buffer
-    buffer: Lines<T>,
+    buffer: Lines<BufReader<File>>,
     /// Current line being scanned
     line: String,
     /// Number of line being scanned
@@ -92,11 +96,14 @@ pub struct Scanner<T: BufRead> {
     fsm: Option<ScannerFsm>,
     /// Whether or not to print debug information
     debug: bool,
+    /// Name of the file currently open
+    file_name: String,
 }
 
-impl<T: BufRead> Scanner<T> {
-    pub fn new(t: T, debug: bool) -> Result<Self, io::Error> {
-        let mut buffer = t.lines();
+impl Scanner {
+    pub fn new(path: &Path, debug: bool) -> Result<Self, io::Error> {
+        let file_name = path.to_string_lossy().to_string();
+        let mut buffer = BufReader::new(File::open(path)?).lines();
 
         // initialize line buffer
         let line = buffer.next().unwrap_or_else(|| Ok(String::new()))?;
@@ -108,6 +115,7 @@ impl<T: BufRead> Scanner<T> {
             line_index: 0,
             fsm: Some(Default::default()),
             debug,
+            file_name,
         })
     }
 
@@ -116,11 +124,17 @@ impl<T: BufRead> Scanner<T> {
     }
 
     fn error<E: Display>(&self, kind: E) -> Error<E> {
-        Error::new(kind, self.line.clone(), self.line_num, self.line_index)
+        Error::new(
+            kind,
+            self.line.clone(),
+            self.line_num,
+            self.line_index,
+            self.file_name.clone(),
+        )
     }
 }
 
-impl<T: BufRead> Iterator for Scanner<T> {
+impl Iterator for Scanner {
     type Item = Result<Token, Error<ErrorKind>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -133,12 +147,14 @@ impl<T: BufRead> Iterator for Scanner<T> {
                             if let Some(w) = w {
                                 // can't use self.error(w) here because of borrow checker semantics
                                 eprintln!(
-                                    "[WARNING] {}",
+                                    "{} {}",
+                                    "[WARNING]".yellow(),
                                     Error::new(
                                         w,
                                         self.line.clone(),
                                         self.line_num,
-                                        self.line_index
+                                        self.line_index,
+                                        self.file_name.clone(),
                                     )
                                 );
                             }
@@ -173,12 +189,12 @@ impl<T: BufRead> Iterator for Scanner<T> {
             match self.fsm.take().unwrap().finish() {
                 Ok((t, w)) => {
                     if let Some(w) = w {
-                        eprintln!("[WARNING] {}", self.error(w));
+                        eprintln!("{} {}", "[WARNING]".yellow(), self.error(w));
                     }
 
                     if let Some(t) = t {
                         if self.debug {
-                            println!("[SCANNER] {}", &t)
+                            println!("{} {}", "[SCANNER]".cyan(), &t)
                         }
                         Some(Ok(t))
                     } else {

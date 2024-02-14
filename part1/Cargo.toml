@@ -9,3 +9,4 @@ edition = "2021"
 clap = { version = "4.5.0", features = [
     "derive",
 ] } # parses command line arguments (similarly to Unix getopts)
+colored = "2.1.0"
