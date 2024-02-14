@@ -151,7 +151,14 @@ impl<T: BufRead> Iterator for Scanner<T> {
                         eprintln!("[WARNING] {w}");
                     }
 
-                    t.map(Ok)
+                    if let Some(t) = t {
+                        if self.debug {
+                            println!("[SCANNER] {}", &t)
+                        }
+                        Some(Ok(t))
+                    } else {
+                        None
+                    }
                 }
                 Err(e) => Some(Err(self.error(e))),
             }
