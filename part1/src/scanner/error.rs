@@ -9,10 +9,15 @@ use colored::Colorize;
 /// This type is generic so that it can store both errors and warnings.
 #[derive(Debug)]
 pub struct Error<T: Display> {
+    /// The type of error that occured
     kind: T,
+    /// The contents of the line on which the error occurred
     line: String,
+    /// The line number on which the error occurred
     line_num: usize,
+    /// The place along the line on which the error occurred
     line_index: usize,
+    /// The name of the file in which the error occurred
     file_name: String,
 }
 
