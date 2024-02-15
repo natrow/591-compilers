@@ -98,9 +98,15 @@ pub struct Scanner {
     debug: bool,
     /// Name of the file currently open
     file_name: String,
+    /// Whether the EOF token has been inserted to the stream
+    eof: bool,
+    /// Internal count of the number of tokens returned
+    token_count: usize,
 }
 
 impl Scanner {
+    /// Constructs the scanner, attempting to open the file path for reading.
+    /// Fails if file cannot be opened or first line cannot be read.
     pub fn new(path: &Path, debug: bool) -> Result<Self, io::Error> {
         let file_name = path.to_string_lossy().to_string();
         let mut buffer = BufReader::new(File::open(path)?).lines();
@@ -116,13 +122,12 @@ impl Scanner {
             fsm: Some(Default::default()),
             debug,
             file_name,
+            eof: false,
+            token_count: 0,
         })
     }
 
-    fn handle_io_error(&self, e: io::Error) -> Error<ErrorKind> {
-        self.error(ErrorKind::Io(e))
-    }
-
+    /// Construct an error value using location information from self
     fn error<E: Display>(&self, kind: E) -> Error<E> {
         Error::new(
             kind,
@@ -132,11 +137,40 @@ impl Scanner {
             self.file_name.clone(),
         )
     }
+
+    /// Construct an I/O type error using information from self
+    fn handle_io_error(&self, e: io::Error) -> Error<ErrorKind> {
+        self.error(ErrorKind::Io(e))
+    }
+
+    /// Attempts to make an EOF token, returning `Some(Ok(Token::Eof))`` on the first
+    /// call and `None` on subsequent calls.
+    fn make_eof_token(&mut self) -> Option<Token> {
+        if !self.eof {
+            self.eof = true;
+            self.token_count += 1;
+            if self.debug {
+                println!("[SCANNER] {}", Token::Eof);
+                println!("[SCANNER] Total tokens: {}", self.token_count);
+            }
+            Some(Token::Eof)
+        } else {
+            None
+        }
+    }
 }
 
 impl Iterator for Scanner {
     type Item = Result<Token, Error<ErrorKind>>;
 
+    /// Implementation of iterator. Points worth noting in this API:
+    /// - `Some(Ok(T))` indicates that the scanning happened with no errors
+    /// - `Some(Error(T))` indicates that the scanner returned an error, and the
+    ///    caller may either ignore this error or abort scanning. (Warnings are printed)
+    /// - `None` indicates that the scanner has completed scanning the file and the
+    ///   iterator may be discarded. It is crucial that this is not returned early.
+    ///
+    /// Every call must return one and only one value.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(fsm) = &mut self.fsm {
             loop {
@@ -163,6 +197,7 @@ impl Iterator for Scanner {
                                 if self.debug {
                                     println!("[SCANNER] {}", &t)
                                 }
+                                self.token_count += 1;
                                 return Some(Ok(t));
                             }
                         }
@@ -194,17 +229,18 @@ impl Iterator for Scanner {
 
                     if let Some(t) = t {
                         if self.debug {
-                            println!("{} {}", "[SCANNER]".cyan(), &t)
+                            self.token_count += 1;
+                            println!("[SCANNER] {}", &t)
                         }
                         Some(Ok(t))
                     } else {
-                        None
+                        self.make_eof_token().map(Ok)
                     }
                 }
                 Err(e) => Some(Err(self.error(e))),
             }
         } else {
-            None
+            self.make_eof_token().map(Ok)
         }
     }
 }

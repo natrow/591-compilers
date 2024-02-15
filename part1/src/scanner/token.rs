@@ -61,6 +61,27 @@ impl Keyword {
             Keyword::Write => "write",
         }
     }
+
+    pub const fn to_upper(self) -> &'static str {
+        match self {
+            Keyword::Int => "INT",
+            Keyword::Do => "DO",
+            Keyword::Read => "READ",
+            Keyword::Char => "CHAR",
+            Keyword::While => "WHILE",
+            Keyword::Continue => "CONTINUE",
+            Keyword::Return => "RETURN",
+            Keyword::Switch => "SWITCH",
+            Keyword::Break => "BREAK",
+            Keyword::If => "IF",
+            Keyword::Case => "CASE",
+            Keyword::Newline => "NEWLINE",
+            Keyword::Else => "ELSE",
+            Keyword::Default => "DEFAULT",
+            Keyword::For => "FOR",
+            Keyword::Write => "WRITE",
+        }
+    }
 }
 
 impl FromStr for Keyword {
@@ -204,12 +225,14 @@ pub enum Token {
     Not,
     /// :
     Colon,
+    /// End of File
+    Eof,
 }
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (class, attribute) = match self {
-            Token::Keyword(k) => (k.to_str(), k.to_string()),
+            Token::Keyword(k) => (k.to_upper(), k.to_string()),
             Token::Identifier(s) => ("ID", s.clone()),
             Token::Number(s) => ("NUMBER", s.clone()),
             Token::CharLiteral(c) => (
@@ -231,6 +254,7 @@ impl Display for Token {
             Token::Semicolon => ("SEMICOLON", ";".to_owned()),
             Token::Not => ("NOT", "!".to_owned()),
             Token::Colon => ("COLON", ":".to_owned()),
+            Token::Eof => ("EOF", "EOF".to_owned()),
         };
         write!(f, "(<{}>, \"{}\")", class, attribute)
     }
