@@ -1,3 +1,10 @@
+//! EGRE 591 part1 - Nathan Rowan and Trevin Vaughan
+//!
+//! Run `cargo doc --open` to view this documentation in a browser.
+
+#![warn(missing_docs)] // friendly reminder to add comments
+#![warn(clippy::missing_docs_in_private_items)]
+
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Parser, ValueEnum};
@@ -11,19 +18,27 @@ use scanner::{
 
 pub mod scanner;
 
+/// Command line arguments accepted by the scanner
 #[derive(Clone, PartialEq, Eq, Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Args {
+    /// Display messages that aid in tracing the
+    /// compilation process
     #[arg(short, long, value_enum)]
     debug: Option<DebugLevel>,
+    /// Display all information
     #[arg(short, long)]
     verbose: bool,
+    /// toyc source files
     input_files: Vec<PathBuf>,
 }
 
+/// Debug levels of the program
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum DebugLevel {
+    /// All messages
     All,
+    /// Scanner messages only
     Scanner,
 }
 

@@ -1,27 +1,46 @@
+//! EGRE 591 part1 - Nathan Rowan and Trevin Vaughan
+
 use std::{fmt::Display, str::FromStr};
 
 /// Keywords recognized by the scanner
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
+    /// int
     Int,
+    /// do
     Do,
+    /// read
     Read,
+    /// char
     Char,
+    /// while
     While,
+    /// continue
     Continue,
+    /// return
     Return,
+    /// switch
     Switch,
+    /// break
     Break,
+    /// if
     If,
+    /// case
     Case,
+    /// newline
     Newline,
+    /// else
     Else,
+    /// default
     Default,
+    /// for
     For,
+    /// write
     Write,
 }
 
 impl Keyword {
+    /// Array of all possible enum values (used for lookups)
     pub const VALUES: [Self; 16] = [
         Self::Int,
         Self::Do,
@@ -41,6 +60,7 @@ impl Keyword {
         Self::Write,
     ];
 
+    /// Convert keyword into string literal (static allocation)
     pub const fn to_str(self) -> &'static str {
         match self {
             Keyword::Int => "int",
@@ -62,6 +82,7 @@ impl Keyword {
         }
     }
 
+    /// Convert keyword into upper-case string literal (static allocation)
     pub const fn to_upper(self) -> &'static str {
         match self {
             Keyword::Int => "INT",
@@ -84,6 +105,11 @@ impl Keyword {
     }
 }
 
+/// Attempt to convert a string slice into a keyword by doing a search.
+///
+/// O(n) array search - fine for such a short list.
+///
+/// `HashMaps` cannot (yet) be statically allocated without the use of dependencies.
 impl FromStr for Keyword {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -95,6 +121,7 @@ impl FromStr for Keyword {
     }
 }
 
+/// Used to print a keyword OR convert it into a heap-allocated `String`
 impl Display for Keyword {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str: &'static str = self.to_str();

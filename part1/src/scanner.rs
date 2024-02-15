@@ -1,3 +1,5 @@
+//! EGRE 591 part1 - Nathan Rowan and Trevin Vaughan
+
 use std::{
     fmt::Display,
     fs::File,
@@ -202,7 +204,7 @@ impl Iterator for Scanner {
                             }
                         }
                         Err(e) => {
-                            self.fsm.take().unwrap(); // invalidate the FSM, abort parsing
+                            self.fsm.take().unwrap(); // invalidate the FSM, abort scanning
                             return Some(Err(self.error(e)));
                         }
                     }
