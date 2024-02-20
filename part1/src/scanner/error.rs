@@ -9,7 +9,7 @@ use colored::Colorize;
 /// This type is generic so that it can store both errors and warnings.
 #[derive(Debug)]
 pub struct Error<T: Display> {
-    /// The type of error that occured
+    /// The type of error that occurred
     kind: T,
     /// The contents of the line on which the error occurred
     line: String,
@@ -75,7 +75,7 @@ pub enum ErrorKind {
     UnclosedStringLiteral,
     /// State machine holds an invalid value
     CorruptState,
-    /// Errors occuring because of I/O
+    /// Errors occurring because of I/O
     Io(io::Error),
 }
 
@@ -94,7 +94,7 @@ impl Display for ErrorKind {
             ErrorKind::NewlineInStringLiteral => "newline in string literal",
             ErrorKind::UnclosedStringLiteral => "unclosed string literal",
             ErrorKind::CorruptState => "state machine was corrupted",
-            ErrorKind::Io(e) => return write!(f, "i/o error occured ({:?})", e),
+            ErrorKind::Io(e) => return write!(f, "i/o error occurred ({:?})", e),
         };
 
         write!(f, "{}", str)
