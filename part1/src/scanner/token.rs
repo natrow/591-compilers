@@ -274,7 +274,7 @@ impl Display for Token {
             Token::LParen => ("LPAREN", "(".to_string()),
             Token::RParen => ("RPAREN", ")".to_string()),
             Token::LCurly => ("LCURLY", "{".to_string()),
-            Token::RCurly => ("LCURLY", "}".to_string()),
+            Token::RCurly => ("RCURLY", "}".to_string()),
             Token::LBracket => ("LBRACKET", "[".to_string()),
             Token::RBracket => ("RBRACKET", "]".to_owned()),
             Token::Comma => ("COMMA", ",".to_owned()),

@@ -1,6 +1,17 @@
 {
     "cSpell.words": [
+        "ADDOP",
+        "ASSIGNOP",
+        "CHARLITERAL",
         "EGRE",
+        "LCURLY",
+        "LPAREN",
+        "MULOP",
+        "Peekable",
+        "RELOP",
+        "rescan",
+        "RPAREN",
+        "rustdoc",
         "toyc",
         "Trevin"
     ]
