@@ -2,27 +2,25 @@
 
 use std::{fmt::Display, path::Path};
 
-pub mod token;
 use colored::Colorize;
-use token::*;
-pub mod error;
-use error::*;
-mod fsm; // see this file for DFA scanner implementation
-use fsm::*;
 
 use crate::file_buffer::*;
 
-/// Scanner implemented as an iterator. This can be thought of as a wrapping FSM
-/// which keeps track of the input buffer and its position. Calls to this iterator
-/// are guaranteed to return either the next token or an error until the end of the
-/// input buffer.
+pub mod error;
+mod fsm;
+pub mod token; // see this file for DFA scanner implementation
+
+use error::{Error, Warning};
+use fsm::Fsm;
+use token::Token;
+
+/// Scanner implemented as an iterator. This combines both the FSM and the file
+/// buffer (also implemented as an iterator) and handles all the call-site logic
+/// and invariance for the FSM.
 ///
-/// Note: iterators in Rust are evaluated lazily. This means this iterator holds a file
-/// handle and only reads lines as needed. If the parser is implemented as another iterator,
-/// it would call `.next()` on this one as needed.
-///
-/// The `Lines<T>` buffer will normally buffer line-by-line which has better performance
-/// than individual calls to `File::read()`.
+/// Note: Rust iterators are lazily evaluated, so the file is only read and tokens
+/// are only scanned as needed by the call-site. If the parser is implemented
+/// as another iterator, then only a minimal amount of memory will be used.
 pub struct Scanner {
     /// Finite state machine that does actual scanning
     ///

@@ -12,10 +12,10 @@ use clap::{Parser, ValueEnum};
 use colored::Colorize;
 
 pub mod file_buffer;
+pub mod scanner;
+
 use file_buffer::Context;
 use scanner::{error::Error, token::Token, Scanner};
-
-pub mod scanner;
 
 /// Command line arguments accepted by the scanner
 #[derive(Clone, PartialEq, Eq, Parser)]
@@ -87,44 +87,26 @@ fn main() -> ExitCode {
     let debug_scanner = matches!(args.debug, Some(DebugLevel::All | DebugLevel::Scanner));
 
     for path in args.input_files {
-        match catch_errs(path, debug_scanner, args.verbose) {
+        match catch_errors(path, debug_scanner, args.verbose) {
             Ok(_) => {}
             Err(e) => eprintln!("{} {}", "[ERROR]".red(), e),
         }
-
-        // match Scanner::new(
-        //     &path,
-        //     matches!(args.debug, Some(DebugLevel::All | DebugLevel::Scanner)),
-        // ) {
-        //     Ok(scanner) => match scanner.collect::<Result<Vec<Token>, Context<Error>>>() {
-        //         Ok(tokens) => {
-        //             if args.verbose {
-        //                 println!("scanned input file {:?}, tokens: {:#?}", path, tokens)
-        //             }
-        //         }
-        //         Err(e) => eprintln!("{} {}", "[ERROR]".red(), e),
-        //     },
-        //     Err(e) => eprintln!(
-        //         "{} I/O error occurred while scanning file {}: {}, skipping...",
-        //         "[WARNING]".yellow(),
-        //         path.to_string_lossy().purple(),
-        //         e.to_string().blue()
-        //     ),
-        // }
     }
 
     ExitCode::SUCCESS
 }
 
-/// Runs scanner on the given file path, collecting all the errors into one type
-fn catch_errs(
+/// Runs scanner on the given file path, collecting all the errors into one value
+fn catch_errors(
     path: PathBuf,
     debug_scanner: bool,
     verbose: bool,
 ) -> Result<(), MaybeContext<Error>> {
     let scanner = Scanner::new(&path, debug_scanner, verbose)?;
 
+    // iterators are lazily evaluated, .collect() will force the entire file to be read
     let res: Result<Vec<Token>, Context<Error>> = scanner.collect();
+    // the actual value can be ignored, but pass errors to the caller
     let _tokens = res?;
 
     Ok(())
