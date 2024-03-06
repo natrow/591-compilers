@@ -15,8 +15,6 @@ pub enum Error {
     NewlineInStringLiteral,
     /// EOF reached before closing " character
     UnclosedStringLiteral,
-    /// State machine holds an invalid value
-    CorruptState,
     /// Errors occurring because of I/O
     Io(io::Error),
 }
@@ -35,7 +33,6 @@ impl Display for Error {
             Error::UnclosedCharLiteral => "unclosed character literal",
             Error::NewlineInStringLiteral => "newline in string literal",
             Error::UnclosedStringLiteral => "unclosed string literal",
-            Error::CorruptState => "state machine was corrupted",
             Error::Io(e) => return write!(f, "i/o error occurred ({:?})", e),
         };
 

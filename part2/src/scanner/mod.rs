@@ -121,22 +121,21 @@ impl Iterator for Scanner {
 
             // 3: Attempt to run state machine
             match fsm.step(c) {
-                Ok((t, w, r)) => {
+                Ok((t, w)) => {
                     if let Some(w) = w {
                         Self::print_warning(&self.file_buffer, w);
                     }
-                    if !r {
+                    if let Some(t) = t {
+                        self.token_count += 1;
+                        self.print_token(&t);
+                        return Some(Ok(t));
+                    } else {
                         if self.verbose {
                             println!("[SCANNER] Advancing...");
                         }
                         if let Err(e) = self.file_buffer.advance() {
                             return Some(Err(e.map_kind(Error::Io)));
                         }
-                    }
-                    if let Some(t) = t {
-                        self.token_count += 1;
-                        self.print_token(&t);
-                        return Some(Ok(t));
                     }
                 }
                 Err(e) => return Some(Err(self.context(e))),

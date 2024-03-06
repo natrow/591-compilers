@@ -1,4 +1,9 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation note: originally we had used a boolean to represent
+//! that a character must be re-scanned. It became obvious that this is
+//! equivalent to `token.is_some()`. Of course this could be proven
+//! rigorously, but it will not be here.
 
 use std::str::FromStr;
 
@@ -21,10 +26,10 @@ pub struct Fsm {
 }
 
 impl Fsm {
-    /// Short-hand method to update the state and return no tokens, warnings, and to not re-scan the current character
-    fn take_edge(&mut self, edge: u8) -> Result<(Option<Token>, Option<Warning>, bool), Error> {
+    /// Short-hand method to update the state and return no tokens or warnings
+    fn take_edge(&mut self, edge: u8) -> Result<(Option<Token>, Option<Warning>), Error> {
         self.state = edge;
-        Ok((None, None, false))
+        Ok((None, None))
     }
 
     /// Same as `Self::take_edge() but also pushes character to the stack`
@@ -32,18 +37,15 @@ impl Fsm {
         &mut self,
         edge: u8,
         c: char,
-    ) -> Result<(Option<Token>, Option<Warning>, bool), Error> {
+    ) -> Result<(Option<Token>, Option<Warning>), Error> {
         self.token.push(c);
         self.take_edge(edge)
     }
 
     /// Resets state to 0, then returns the given token, no warnings, and to re-scan the current character
-    fn give_token_and_rescan(
-        &mut self,
-        t: Token,
-    ) -> Result<(Option<Token>, Option<Warning>, bool), Error> {
+    fn return_token(&mut self, t: Token) -> Result<(Option<Token>, Option<Warning>), Error> {
         self.state = 0;
-        Ok((Some(t), None, true))
+        Ok((Some(t), None))
     }
 
     /// Returns keyword or identifier token after lookup
@@ -56,53 +58,52 @@ impl Fsm {
     }
 
     /// Returns relop after successful matching of current state
-    fn make_relop(&self) -> Result<Token, Error> {
+    fn make_relop(&self) -> Token {
         match (self.state, self.token.as_str()) {
-            (18, "=") => Ok(Token::RelOp(RelOp::Eq)),
-            (18, ">") => Ok(Token::RelOp(RelOp::GtEq)),
-            (18, "<") => Ok(Token::RelOp(RelOp::LtEq)),
-            (18, "!") => Ok(Token::RelOp(RelOp::Neq)),
-            (20, "<") => Ok(Token::RelOp(RelOp::Lt)),
-            (20, ">") => Ok(Token::RelOp(RelOp::Gt)),
-            _ => Err(Error::CorruptState),
+            (18, "=") => Token::RelOp(RelOp::Eq),
+            (18, ">") => Token::RelOp(RelOp::GtEq),
+            (18, "<") => Token::RelOp(RelOp::LtEq),
+            (18, "!") => Token::RelOp(RelOp::Neq),
+            (20, "<") => Token::RelOp(RelOp::Lt),
+            (20, ">") => Token::RelOp(RelOp::Gt),
+            _ => unreachable!("make_relop() called with unknown state"),
         }
     }
 
     /// Returns addop after successful matching of current state
-    fn make_addop(&self) -> Result<Token, Error> {
+    fn make_addop(&self) -> Token {
         match self.token.as_str() {
-            "+" => Ok(Token::AddOp(AddOp::Add)),
-            "-" => Ok(Token::AddOp(AddOp::Sub)),
-            "|" => Ok(Token::AddOp(AddOp::BoolOr)),
-            _ => Err(Error::CorruptState),
+            "+" => Token::AddOp(AddOp::Add),
+            "-" => Token::AddOp(AddOp::Sub),
+            "|" => Token::AddOp(AddOp::BoolOr),
+            _ => unreachable!("make_addop() called with unknown state"),
         }
     }
 
     /// Returns mulop after successful matching of current state
-    fn make_mulop(&self) -> Result<Token, Error> {
+    fn make_mulop(&self) -> Token {
         match self.token.as_str() {
-            "*" => Ok(Token::MulOp(MulOp::Mul)),
-            "/" => Ok(Token::MulOp(MulOp::Div)),
-            "%" => Ok(Token::MulOp(MulOp::Mod)),
-            "&" => Ok(Token::MulOp(MulOp::BoolAnd)),
-            _ => Err(Error::CorruptState),
+            "*" => Token::MulOp(MulOp::Mul),
+            "/" => Token::MulOp(MulOp::Div),
+            "%" => Token::MulOp(MulOp::Mod),
+            "&" => Token::MulOp(MulOp::BoolAnd),
+            _ => unreachable!("make_mulop() called with unknown state"),
         }
     }
 
-    /// Returns an illegal character warning, no token, no rescan, and resets state to 0
-    fn warn_illegal_character(&mut self) -> Result<(Option<Token>, Option<Warning>, bool), Error> {
-        self.state = 0;
-        Ok((None, Some(Warning::IllegalCharacter), false))
+    /// Returns an illegal character warning and no token
+    fn warn_illegal_character(&self) -> Result<(Option<Token>, Option<Warning>), Error> {
+        Ok((None, Some(Warning::IllegalCharacter)))
     }
 
     /// Implementation of the DFA transitions.
     ///
     /// Can return an error, or a pair of an optional token and optional warning.
-    /// Also returns a bool indicating whether the token must be re-scanned. For example,
-    /// when an acceptor state returns a token but the current character wasn't used.
+    ///
+    /// The current character must be re-scanned iff a token is returned.
     ///
     /// Note: accepting states only return a value on *the next edge*.
-    pub fn step(&mut self, c: char) -> Result<(Option<Token>, Option<Warning>, bool), Error> {
+    pub fn step(&mut self, c: char) -> Result<(Option<Token>, Option<Warning>), Error> {
         // FSM implementation
         match self.state {
             0 => {
@@ -134,7 +135,7 @@ impl Fsm {
                         ',' => self.take_edge(31),             // comma
                         ';' => self.take_edge(32),             // semicolon
                         ':' => self.take_edge(33),             // colon
-                        _ => Ok((None, Some(Warning::IllegalCharacter), false)),
+                        _ => self.warn_illegal_character(),
                     }
                 }
             }
@@ -144,7 +145,7 @@ impl Fsm {
                     self.comment_level += 1;
                     self.take_edge(3)
                 }
-                _ => self.give_token_and_rescan(Token::MulOp(MulOp::Div)),
+                _ => self.return_token(Token::MulOp(MulOp::Div)),
             },
             2 => match c {
                 '\n' => self.take_edge(0),
@@ -168,13 +169,13 @@ impl Fsm {
             },
             5 => match c {
                 'A'..='Z' | 'a'..='z' | '0'..='9' => self.take_edge_and_push(5, c),
-                _ => self.give_token_and_rescan(self.make_id_or_keyword()),
+                _ => self.return_token(self.make_id_or_keyword()),
             },
             6 => match c {
                 '0'..='9' => self.take_edge_and_push(6, c),
                 '.' => self.take_edge_and_push(7, c),
                 'E' => self.take_edge_and_push(9, c),
-                _ => self.give_token_and_rescan(Token::Number(self.token.clone())),
+                _ => self.return_token(Token::Number(self.token.clone())),
             },
             7 => match c {
                 '0'..='9' => self.take_edge_and_push(8, c),
@@ -183,7 +184,7 @@ impl Fsm {
             8 => match c {
                 '0'..='9' => self.take_edge_and_push(8, c),
                 'E' => self.take_edge_and_push(9, c),
-                _ => self.give_token_and_rescan(Token::Number(self.token.clone())),
+                _ => self.return_token(Token::Number(self.token.clone())),
             },
             9 => match c {
                 '0'..='9' => self.take_edge_and_push(11, c),
@@ -196,14 +197,14 @@ impl Fsm {
             },
             11 => match c {
                 '0'..='9' => self.take_edge_and_push(11, c),
-                _ => self.give_token_and_rescan(Token::Number(self.token.clone())),
+                _ => self.return_token(Token::Number(self.token.clone())),
             },
             12 => match c {
                 '\'' => self.take_edge(13),
                 '\n' => Err(Error::NewlineInCharLiteral),
                 _ => self.take_edge_and_push(14, c),
             },
-            13 => self.give_token_and_rescan(Token::CharLiteral(self.token.chars().nth(0))),
+            13 => self.return_token(Token::CharLiteral(self.token.chars().nth(0))),
             14 => match c {
                 '\'' => self.take_edge(13),
                 _ => Err(Error::UnclosedCharLiteral),
@@ -213,39 +214,39 @@ impl Fsm {
                 '\n' => Err(Error::NewlineInStringLiteral),
                 _ => self.take_edge_and_push(15, c),
             },
-            16 => self.give_token_and_rescan(Token::StringLiteral(self.token.clone())),
+            16 => self.return_token(Token::StringLiteral(self.token.clone())),
             17 => match c {
                 '=' => self.take_edge(18),
-                _ => self.give_token_and_rescan(Token::AssignOp),
+                _ => self.return_token(Token::AssignOp),
             },
-            18 => self.give_token_and_rescan(self.make_relop()?),
+            18 => self.return_token(self.make_relop()),
             19 => match c {
                 '=' => self.take_edge(18),
-                _ => self.give_token_and_rescan(Token::Not),
+                _ => self.return_token(Token::Not),
             },
             20 => match c {
                 '=' => self.take_edge(18),
-                _ => self.give_token_and_rescan(self.make_relop()?),
+                _ => self.return_token(self.make_relop()),
             },
-            21 => self.give_token_and_rescan(self.make_addop()?),
+            21 => self.return_token(self.make_addop()),
             22 => match c {
                 '|' => self.take_edge(21),
                 _ => self.warn_illegal_character(),
             },
-            23 => self.give_token_and_rescan(self.make_mulop()?),
+            23 => self.return_token(self.make_mulop()),
             24 => match c {
                 '&' => self.take_edge(23),
                 _ => self.warn_illegal_character(),
             },
-            25 => self.give_token_and_rescan(Token::LParen),
-            26 => self.give_token_and_rescan(Token::RParen),
-            27 => self.give_token_and_rescan(Token::LCurly),
-            28 => self.give_token_and_rescan(Token::RCurly),
-            29 => self.give_token_and_rescan(Token::LBracket),
-            30 => self.give_token_and_rescan(Token::RBracket),
-            31 => self.give_token_and_rescan(Token::Comma),
-            32 => self.give_token_and_rescan(Token::Semicolon),
-            33 => self.give_token_and_rescan(Token::Colon),
+            25 => self.return_token(Token::LParen),
+            26 => self.return_token(Token::RParen),
+            27 => self.return_token(Token::LCurly),
+            28 => self.return_token(Token::RCurly),
+            29 => self.return_token(Token::LBracket),
+            30 => self.return_token(Token::RBracket),
+            31 => self.return_token(Token::Comma),
+            32 => self.return_token(Token::Semicolon),
+            33 => self.return_token(Token::Colon),
             34 => match c {
                 '*' => {
                     self.comment_level += 1;
@@ -253,12 +254,12 @@ impl Fsm {
                 }
                 _ => self.take_edge(3),
             },
-            _ => Err(Error::CorruptState),
+            _ => unreachable!("step() called with unknown state"),
         }
     }
 
     /// Finishes DFA, returning no tokens and no warnings
-    fn finish_none() -> Result<(Option<Token>, Option<Warning>), Error> {
+    fn finish_none(self) -> Result<(Option<Token>, Option<Warning>), Error> {
         Ok((None, None))
     }
 
@@ -268,28 +269,33 @@ impl Fsm {
     }
 
     /// Finishes DFA, returning an illegal character warning
-    fn finish_illegal_char() -> Result<(Option<Token>, Option<Warning>), Error> {
+    fn finish_illegal_char(self) -> Result<(Option<Token>, Option<Warning>), Error> {
         Ok((None, Some(Warning::IllegalCharacter)))
+    }
+
+    /// Finishes DFA, returning an error
+    fn finish_err(self, e: Error) -> Result<(Option<Token>, Option<Warning>), Error> {
+        Err(e)
     }
 
     /// Consumes the DFA and evaluates the validity of the final state.
     pub fn finish(self) -> Result<(Option<Token>, Option<Warning>), Error> {
         match self.state {
-            0 => Self::finish_none(),
+            0 => self.finish_none(),
             1 => Self::finish_token(Token::MulOp(MulOp::Div)),
-            2 => Self::finish_none(), // comment at the end of the file
-            3 | 4 | 34 => Err(Error::UnclosedComment),
+            2 => self.finish_none(), // comment at the end of the file
+            3 | 4 | 34 => self.finish_err(Error::UnclosedComment),
             5 => Self::finish_token(self.make_id_or_keyword()),
             6 | 8 | 11 => Self::finish_token(Token::Number(self.token)),
-            12 | 14 => Err(Error::UnclosedCharLiteral),
+            12 | 14 => self.finish_err(Error::UnclosedCharLiteral),
             13 => Self::finish_token(Token::CharLiteral(self.token.chars().nth(0))),
-            15 => Err(Error::UnclosedStringLiteral),
+            15 => self.finish_err(Error::UnclosedStringLiteral),
             16 => Self::finish_token(Token::StringLiteral(self.token)),
             17 => Self::finish_token(Token::AssignOp),
-            18 | 20 => Self::finish_token(self.make_relop()?),
+            18 | 20 => Self::finish_token(self.make_relop()),
             19 => Self::finish_token(Token::Not),
-            21 => Self::finish_token(self.make_addop()?),
-            23 => Self::finish_token(self.make_mulop()?),
+            21 => Self::finish_token(self.make_addop()),
+            23 => Self::finish_token(self.make_mulop()),
             25 => Self::finish_token(Token::LParen),
             26 => Self::finish_token(Token::RParen),
             27 => Self::finish_token(Token::LCurly),
@@ -299,8 +305,8 @@ impl Fsm {
             31 => Self::finish_token(Token::Comma),
             32 => Self::finish_token(Token::Semicolon),
             33 => Self::finish_token(Token::Colon),
-            35.. => Err(Error::CorruptState),
-            _ => Self::finish_illegal_char(),
+            35.. => unreachable!("finish() called with unknown state"),
+            _ => self.finish_illegal_char(),
         }
     }
 }
