@@ -1,4 +1,4 @@
-//! EGRE 591 part1 - Nathan Rowan and Trevin Vaughan
+//! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 //!
 //! Run `cargo doc --open` to view this documentation in a browser.
 

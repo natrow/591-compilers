@@ -1,4 +1,4 @@
-//! EGRE 591 part1 - Nathan Rowan and Trevin Vaughan
+//! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
 use std::{fmt::Display, str::FromStr};
 
