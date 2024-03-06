@@ -2,9 +2,12 @@
 //!
 //! Run `cargo doc --open` to view this documentation in a browser.
 
-#![warn(missing_docs)] // friendly reminder to add comments
+// friendly reminders to add comments
+#![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 #![warn(rustdoc::all)]
+#![warn(clippy::missing_panics_doc)]
+#![warn(clippy::missing_errors_doc)]
 
 use std::{path::PathBuf, process::ExitCode};
 

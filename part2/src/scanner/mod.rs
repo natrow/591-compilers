@@ -40,6 +40,9 @@ pub struct Scanner {
 
 impl Scanner {
     /// Constructs the scanner, attempting to open the file path for reading.
+    ///
+    /// # Errors
+    ///
     /// Fails if file cannot be opened or first line cannot be read.
     pub fn new(path: &Path, debug: bool, verbose: bool) -> Result<Self, Error> {
         let file_buffer = FileBuffer::new(path, verbose)?;
@@ -88,7 +91,7 @@ impl Scanner {
     }
 
     /// Prints tokens in debug mode
-    fn print_token(&self, t: &Token) {
+    fn debug_print_token(&self, t: &Token) {
         if self.debug {
             println!("[SCANNER] {}", t);
         }
@@ -127,15 +130,17 @@ impl Iterator for Scanner {
                     }
                     if let Some(t) = t {
                         self.token_count += 1;
-                        self.print_token(&t);
+                        self.debug_print_token(&t);
                         return Some(Ok(t));
-                    } else {
-                        if self.verbose {
-                            println!("[SCANNER] Advancing...");
-                        }
-                        if let Err(e) = self.file_buffer.advance() {
-                            return Some(Err(e.map_kind(Error::Io)));
-                        }
+                    }
+
+                    // if no token was returned, advance the buffer
+
+                    if self.verbose {
+                        println!("[SCANNER] Advancing...");
+                    }
+                    if let Err(e) = self.file_buffer.advance() {
+                        return Some(Err(e.map_kind(Error::Io)));
                     }
                 }
                 Err(e) => return Some(Err(self.context(e))),
@@ -150,7 +155,7 @@ impl Iterator for Scanner {
                 }
                 if let Some(t) = t {
                     self.token_count += 1;
-                    self.print_token(&t);
+                    self.debug_print_token(&t);
                     Some(Ok(t))
                 } else {
                     self.make_eof_token().map(Ok)

@@ -133,6 +133,10 @@ pub struct FileBuffer {
 
 impl FileBuffer {
     /// Constructor for FileBuffer
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file cannot be opened or the first line cannot be read.
     pub fn new(path: &Path, verbose: bool) -> Result<Self, Error> {
         let file_name = path.to_string_lossy().to_string();
         let mut inner = BufReader::new(File::open(path)?).lines().peekable();
@@ -186,6 +190,11 @@ impl FileBuffer {
     }
 
     /// Moves to the next character in the buffer
+    ///
+    /// # Errors
+    ///
+    /// Fails a line cannot be read.
+    #[allow(clippy::missing_panics_doc)] // .unwrap() is unreachable
     pub fn advance(&mut self) -> Result<(), Context<Error>> {
         let Some(line) = &self.line else {
             return Ok(());

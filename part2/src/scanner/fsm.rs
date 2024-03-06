@@ -42,7 +42,9 @@ impl Fsm {
         self.take_edge(edge)
     }
 
-    /// Resets state to 0, then returns the given token, no warnings, and to re-scan the current character
+    /// Resets state to 0, then returns the given token and no warnings.
+    ///
+    /// The caller of this function must ensure that the input character is re-scanned.
     fn return_token(&mut self, t: Token) -> Result<(Option<Token>, Option<Warning>), Error> {
         self.state = 0;
         Ok((Some(t), None))
