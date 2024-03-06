@@ -85,6 +85,35 @@ impl<T: Display> Display for Context<T> {
     }
 }
 
+/// An error type that may or may not have locational context
+pub enum MaybeContext<E: Display> {
+    /// Variant that happens when there is locational context
+    Context(Context<E>),
+    /// Variant that happens when there is no locational context
+    NoContext(E),
+}
+
+impl<E: Display> From<Context<E>> for MaybeContext<E> {
+    fn from(value: Context<E>) -> Self {
+        Self::Context(value)
+    }
+}
+
+impl<E: Display> From<E> for MaybeContext<E> {
+    fn from(value: E) -> Self {
+        Self::NoContext(value)
+    }
+}
+
+impl<E: Display> Display for MaybeContext<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MaybeContext::Context(c) => c.fmt(f),
+            MaybeContext::NoContext(n) => n.fmt(f),
+        }
+    }
+}
+
 /// An iterator over the characters in a file.
 /// Internally buffers by line.
 pub struct FileBuffer {
@@ -133,6 +162,11 @@ impl FileBuffer {
     /// Gets the current character
     pub fn get_char(&mut self) -> Option<char> {
         let line = self.line.as_ref()?;
+
+        // case 1: get a normal character along the line
+        // case 2: insert newlines where applicable (these are stripped by Lines<T>)
+        // case 3: buffer is empty
+
         if let Some(c) = line.chars().nth(self.line_index) {
             if self.verbose {
                 println!("[FILE_BUFFER] Got character from line: {}", c);
@@ -153,30 +187,33 @@ impl FileBuffer {
 
     /// Moves to the next character in the buffer
     pub fn advance(&mut self) -> Result<(), Context<Error>> {
-        if let Some(line) = &self.line {
-            // advance to the next character in the line or fetch the next one
-            if self.line_index < line.len() {
-                self.line_index += 1;
-                if self.verbose {
-                    println!("[FILE_BUFFER] advancing line_index");
-                }
-                Ok(())
-            } else {
-                if self.verbose {
-                    println!("[FILE_BUFFER] advancing line_num");
-                }
-                self.line_index = 0;
-                self.line_num += 1;
-                self.line = self
-                    .inner
-                    .next()
-                    .transpose()
-                    .map_err(|e| self.context(e).unwrap())?;
-                Ok(())
+        let Some(line) = &self.line else {
+            return Ok(());
+        };
+
+        // either move along the line or refresh the line buffer
+
+        if self.line_index < line.len() {
+            if self.verbose {
+                println!("[FILE_BUFFER] advancing line_index");
             }
+            // note, this DOES allow line_index to be equal to line.len(),
+            // in order to inject newline characters in the get_char() function.
+            self.line_index += 1;
         } else {
-            Ok(())
+            if self.verbose {
+                println!("[FILE_BUFFER] advancing line_num");
+            }
+            self.line_index = 0;
+            self.line_num += 1;
+            self.line = self
+                .inner
+                .next()
+                .transpose()
+                .map_err(|e| self.context(e).unwrap())?;
         }
+
+        Ok(())
     }
 }
 
@@ -185,7 +222,10 @@ impl Iterator for FileBuffer {
 
     // combine get_char() and advance() into one call
     fn next(&mut self) -> Option<Self::Item> {
+        // get next character
         let c = self.get_char()?;
+        // advance, filling the Ok() value with the character
+        // then transposing the Result<Option<T>> to an Option<Result<T>>
         self.advance().map(|_| Some(c)).transpose()
     }
 }

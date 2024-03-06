@@ -108,54 +108,56 @@ impl Iterator for Scanner {
     /// Every call must return one and only one value.
     fn next(&mut self) -> Option<Self::Item> {
         // 1: Check if FSM is in a valid state
-        if let Some(fsm) = &mut self.fsm {
-            // 2: Get next character in the buffer
-            // (repeat until a token is made or there are no more characters)
-            while let Some(c) = self.file_buffer.get_char() {
-                if self.verbose {
-                    println!("[SCANNER] Running state machine against char {}", c);
-                }
-                // 3: Attempt to run the state machine
-                match fsm.step(c) {
-                    Ok((t, w, r)) => {
-                        if let Some(w) = w {
-                            Self::print_warning(&self.file_buffer, w);
-                        }
-                        if !r {
-                            if self.verbose {
-                                println!("[SCANNER] Advancing...");
-                            }
-                            if let Err(e) = self.file_buffer.advance() {
-                                return Some(Err(e.map_kind(Error::Io)));
-                            }
-                        }
-                        if let Some(t) = t {
-                            self.token_count += 1;
-                            self.print_token(&t);
-                            return Some(Ok(t));
-                        }
-                    }
-                    Err(e) => return Some(Err(self.context(e))),
-                }
+        let Some(fsm) = &mut self.fsm else {
+            return self.make_eof_token().map(Ok);
+        };
+
+        // 2: Get next character in the buffer
+        // (repeat until a token is made or there are no more characters)
+        while let Some(c) = self.file_buffer.get_char() {
+            if self.verbose {
+                println!("[SCANNER] Running state machine against char {}", c);
             }
-            // 4: Finish the state machine
-            match self.finish_fsm() {
-                Ok((t, w)) => {
+
+            // 3: Attempt to run state machine
+            match fsm.step(c) {
+                Ok((t, w, r)) => {
                     if let Some(w) = w {
                         Self::print_warning(&self.file_buffer, w);
+                    }
+                    if !r {
+                        if self.verbose {
+                            println!("[SCANNER] Advancing...");
+                        }
+                        if let Err(e) = self.file_buffer.advance() {
+                            return Some(Err(e.map_kind(Error::Io)));
+                        }
                     }
                     if let Some(t) = t {
                         self.token_count += 1;
                         self.print_token(&t);
-                        Some(Ok(t))
-                    } else {
-                        self.make_eof_token().map(Ok)
+                        return Some(Ok(t));
                     }
                 }
-                Err(e) => Some(Err(self.context(e))),
+                Err(e) => return Some(Err(self.context(e))),
             }
-        } else {
-            self.make_eof_token().map(Ok)
+        }
+
+        // 4. Finish the state machine
+        match self.finish_fsm() {
+            Ok((t, w)) => {
+                if let Some(w) = w {
+                    Self::print_warning(&self.file_buffer, w);
+                }
+                if let Some(t) = t {
+                    self.token_count += 1;
+                    self.print_token(&t);
+                    Some(Ok(t))
+                } else {
+                    self.make_eof_token().map(Ok)
+                }
+            }
+            Err(e) => Some(Err(self.context(e))),
         }
     }
 }
