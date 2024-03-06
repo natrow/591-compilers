@@ -1,3 +1,3 @@
 [workspace]
-members = [ "parser_test","part0", "part1", "regex_test"]
+members = ["parser_test", "part0", "part1", "part2", "regex_test"]
 resolver = "2"
