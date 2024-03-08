@@ -22,12 +22,9 @@ use std::{
     hash::Hash,
 };
 
-use log::trace;
+use log::{debug, trace};
 
 use crate::cfg::{ContextFreeGrammar, Productions, Symbol};
-
-/// Max recursion depth
-const RECURSION_LIMIT: usize = 50;
 
 /// Errors that prevent a context-free grammar from being LL(1)
 #[derive(Debug)]
@@ -54,7 +51,7 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         let mut terminals = HashSet::new();
 
         for rhs in productions.get(n).unwrap() {
-            let first = memoize.first_of_rhs(productions, rhs, RECURSION_LIMIT);
+            let first = memoize.first_of_rhs(productions, rhs, &mut [n].into());
             if !terminals.is_disjoint(&first) {
                 return Err(Error::Rule1(n.clone()));
             }
@@ -70,9 +67,9 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         productions: &Productions<T, N>,
         n: &N,
     ) -> Result<(), Error<N>> {
-        if memoize.nonterminal_generates_empty(productions, n, RECURSION_LIMIT) {
-            let first = memoize.first_of_nonterminal(productions, n, RECURSION_LIMIT);
-            let follow = memoize.follow_of_nonterminal(productions, n, RECURSION_LIMIT);
+        if memoize.nonterminal_generates_empty(productions, n, &mut [n].into()) {
+            let first = memoize.first_of_nonterminal(productions, n, &mut [n].into());
+            let follow = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
 
             if !first.is_disjoint(&follow) {
                 return Err(Error::Rule2(n.clone()));
@@ -93,14 +90,19 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
 
         // calculate first sets
         for n in cfg.get_nonterminals() {
-            let set = memoize.first_of_nonterminal(productions, n, RECURSION_LIMIT);
-            trace!("FIRST({:?}) = {:?}", n, set);
+            let set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
+            debug!("FIRST({:?}) = {:?}", n, set);
         }
+
+        debug!("Finished calculating first sets!");
+
         // calculate follow sets
         for n in cfg.get_nonterminals() {
-            let set = memoize.follow_of_nonterminal(productions, n, RECURSION_LIMIT);
-            trace!("FOLLOW({:?}) = {:?}", n, set);
+            let set = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
+            debug!("FOLLOW({:?}) = {:?}", n, set);
         }
+
+        debug!("Finished calculating follow sets!");
 
         // apply rule 1
         cfg.get_nonterminals()
@@ -118,7 +120,7 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
 
 /// Memoized look-up tables of calculated values.
 #[derive(Debug)]
-struct Memoize<T: Eq + Hash + Clone, N: Eq + Hash + Clone> {
+struct Memoize<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> {
     /// Memoized result of the first() function on a nonterminal
     first: HashMap<N, HashSet<T>>,
     /// Memoized result of the follow() function on a nonterminal
@@ -127,7 +129,7 @@ struct Memoize<T: Eq + Hash + Clone, N: Eq + Hash + Clone> {
     generates_empty: HashMap<N, bool>,
 }
 
-impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Default for Memoize<T, N> {
+impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Default for Memoize<T, N> {
     fn default() -> Self {
         Self {
             first: Default::default(),
@@ -137,33 +139,38 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Default for Memoize<T, N> {
     }
 }
 
-impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
+impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
     /// Determines whether a symbol can generate the empty string. Terminals never do this.
-    fn symbol_generates_empty(
+    fn symbol_generates_empty<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        s: &Symbol<T, N>,
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        s: &'a Symbol<T, N>,
+        call_stack: &mut HashSet<&'a N>,
     ) -> bool {
         match s {
             Symbol::Nonterminal(n) => {
-                self.nonterminal_generates_empty(productions, n, recursion_limit)
+                assert!(call_stack.insert(n), "cycle detected");
+                let result = self.nonterminal_generates_empty(productions, n, call_stack);
+                call_stack.remove(n);
+                result
             }
             Symbol::Terminal(_) => false,
         }
     }
 
     /// Determines whether a nonterminal can generate the empty string.
-    fn nonterminal_generates_empty(
+    fn nonterminal_generates_empty<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        n: &N,
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        n: &'a N,
+        call_stack: &mut HashSet<&'a N>,
     ) -> bool {
         // 1. Already in the set
         if let Some(v) = self.generates_empty.get(n) {
             return *v;
         }
+
+        trace!("Calculating whether {:?} generates the empty string...", n);
 
         // 2. A production contains the empty string
         if productions.get(n).unwrap().iter().any(|v| v.is_empty()) {
@@ -171,16 +178,11 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
             return true;
         }
 
-        assert!(
-            recursion_limit > 0,
-            "recursion limit reached in Memoize::nonterminal_generates_empty"
-        );
-
         // 3. A production can generate the empty string
         for rhs in productions.get(n).unwrap().iter() {
             if rhs
                 .iter()
-                .all(|s| self.symbol_generates_empty(productions, s, recursion_limit - 1))
+                .all(|s| self.symbol_generates_empty(productions, s, call_stack))
             {
                 self.generates_empty.insert(n.clone(), true);
                 return true;
@@ -192,31 +194,36 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
     }
 
     /// Determines the result of first() for a symbol. Terminals always return themselves.
-    fn first_of_symbol(
+    fn first_of_symbol<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        s: &Symbol<T, N>,
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        s: &'a Symbol<T, N>,
+        call_stack: &mut HashSet<&'a N>,
     ) -> HashSet<T> {
         match s {
-            Symbol::Nonterminal(n) => self.first_of_nonterminal(productions, n, recursion_limit),
+            Symbol::Nonterminal(n) => {
+                assert!(call_stack.insert(n), "cycle detected");
+                let res = self.first_of_nonterminal(productions, n, call_stack);
+                call_stack.remove(n);
+                res
+            }
             Symbol::Terminal(t) => HashSet::from([t.clone()]),
         }
     }
 
     /// Determines the result of first() for a right-hand-side of a production rule.
-    fn first_of_rhs(
+    fn first_of_rhs<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        rhs: &[Symbol<T, N>],
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        rhs: &'a [Symbol<T, N>],
+        call_stack: &mut HashSet<&'a N>,
     ) -> HashSet<T> {
         let mut set = HashSet::new();
 
         for s in rhs {
-            set.extend(self.first_of_symbol(productions, s, recursion_limit));
-            // repeat until a symbol that cannot be an empty string has been reached
-            if !self.symbol_generates_empty(productions, s, RECURSION_LIMIT) {
+            set.extend(self.first_of_symbol(productions, s, call_stack));
+            // repeat until a non-empty symbol has been reached
+            if !self.symbol_generates_empty(productions, s, &mut HashSet::new()) {
                 break;
             }
         }
@@ -225,28 +232,25 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
     }
 
     /// Determines the result of first() for a nonterminal, using all of its production rules.
-    fn first_of_nonterminal(
+    fn first_of_nonterminal<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        n: &N,
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        n: &'a N,
+        call_stack: &mut HashSet<&'a N>,
     ) -> HashSet<T> {
         // if the first set is already calculated, return it
         if let Some(v) = self.first.get(n) {
             return v.clone();
         }
 
+        trace!("Calculating first of {:?}...", n);
+
         // otherwise calculate the set
         let mut set = HashSet::new();
 
         // expand each production
         for rhs in productions.get(n).unwrap() {
-            assert!(
-                recursion_limit > 0,
-                "recursion limit reached in Memoize::first_of_nonterminal()"
-            );
-
-            set.extend(self.first_of_rhs(productions, rhs, recursion_limit - 1));
+            set.extend(self.first_of_rhs(productions, rhs, call_stack));
         }
 
         self.first.insert(n.clone(), set.clone());
@@ -254,16 +258,18 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
     }
 
     /// Determines the result of follow() for a nonterminal, using all production rules of the grammar.
-    fn follow_of_nonterminal(
+    fn follow_of_nonterminal<'a>(
         &mut self,
-        productions: &Productions<T, N>,
-        n: &N,
-        recursion_limit: usize,
+        productions: &'a Productions<T, N>,
+        n: &'a N,
+        call_stack: &mut HashSet<&'a N>,
     ) -> HashSet<T> {
         // if the follow set is already calculated, return it
         if let Some(v) = self.follow.get(n) {
             return v.clone();
         }
+
+        trace!("Calculating follow of {:?}...", n);
 
         // otherwise calculate the set
         let mut set = HashSet::new();
@@ -276,37 +282,31 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone> Memoize<T, N> {
                 if s == n {
                     // if the rest of rhs is non-empty, add the first terminal in the remainder of rhs
                     if i + 1 < p.1.len() {
-                        set.extend(self.first_of_rhs(productions, &p.1[i + 1..], RECURSION_LIMIT));
+                        set.extend(self.first_of_rhs(
+                            productions,
+                            &p.1[i + 1..],
+                            &mut HashSet::new(),
+                        ));
 
                         // if the rest of the rhs can generate the empty string, append the follow of the lhs of the production
-                        if p.0 != n
+                        if !call_stack.contains(p.0)
                             && p.1[i + 1..].iter().all(|s| {
-                                self.symbol_generates_empty(productions, s, RECURSION_LIMIT)
+                                self.symbol_generates_empty(productions, s, &mut HashSet::new())
                             })
                         {
-                            assert!(
-                                recursion_limit > 0,
-                                "recursion limit reached in Memoize::follow_of_nonterminal()"
-                            );
+                            call_stack.insert(p.0);
 
-                            set.extend(self.follow_of_nonterminal(
-                                productions,
-                                p.0,
-                                recursion_limit - 1,
-                            ))
+                            set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));
+
+                            call_stack.remove(p.0);
                         }
-                    } else if p.0 != n {
-                        assert!(
-                            recursion_limit > 0,
-                            "recursion limit reached in Memoize::follow_of_nonterminal()"
-                        );
+                    } else if !call_stack.contains(p.0) {
+                        call_stack.insert(p.0);
 
                         // otherwise append the follow of the lhs of the production
-                        set.extend(self.follow_of_nonterminal(
-                            productions,
-                            p.0,
-                            recursion_limit - 1,
-                        ))
+                        set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));
+
+                        call_stack.remove(p.0);
                     }
                 }
             }

@@ -19,6 +19,9 @@ mod test1 {
         token::{self, Keyword, Token},
     };
 
+    /// toyc LL(1) test
+    mod toyc;
+
     //into for test 1
     // impl From<&'static str> for Symbol<char, &'static str> {
     //     fn from(value: &'static str) -> Self {
