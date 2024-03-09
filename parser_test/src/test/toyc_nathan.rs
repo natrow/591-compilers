@@ -767,7 +767,7 @@ fn toyc_is_ll1() {
     let p_actual_parameters_ = (
         "ActualParameters'",
         [
-            vec![comma(), nt_expression(), nt_actual_parameters()],
+            vec![comma(), nt_expression(), nt_actual_parameters_()],
             vec![],
         ]
         .into(),

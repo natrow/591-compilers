@@ -28,7 +28,7 @@ use crate::cfg::{ContextFreeGrammar, Productions, Symbol};
 
 /// Errors that prevent a context-free grammar from being LL(1)
 #[derive(Debug)]
-pub enum Error<N: Eq + Hash + Clone> {
+pub enum Error<N: Eq + Hash + Clone + Debug> {
     /// A nonterminal failed rule 1
     Rule1(N),
     /// A nonterminal failed rule 2
@@ -36,7 +36,7 @@ pub enum Error<N: Eq + Hash + Clone> {
 }
 
 /// An LL(1) grammar. This is a context-free grammar which has been verified to follow the rules.
-pub struct LL1<T: Eq + Hash + Clone, N: Eq + Hash + Clone> {
+pub struct LL1<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> {
     /// Definition of the grammar
     _cfg: ContextFreeGrammar<T, N>,
 }
@@ -120,7 +120,7 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
 
 /// Memoized look-up tables of calculated values.
 #[derive(Debug)]
-struct Memoize<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> {
+struct Memoize<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> {
     /// Memoized result of the first() function on a nonterminal
     first: HashMap<N, HashSet<T>>,
     /// Memoized result of the follow() function on a nonterminal
@@ -129,7 +129,7 @@ struct Memoize<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> {
     generates_empty: HashMap<N, bool>,
 }
 
-impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Default for Memoize<T, N> {
+impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Default for Memoize<T, N> {
     fn default() -> Self {
         Self {
             first: Default::default(),
@@ -139,7 +139,7 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Default for Memoize<T, 
     }
 }
 
-impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
+impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
     /// Determines whether a symbol can generate the empty string. Terminals never do this.
     fn symbol_generates_empty<'a>(
         &mut self,
@@ -175,6 +175,7 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
         // 2. A production contains the empty string
         if productions.get(n).unwrap().iter().any(|v| v.is_empty()) {
             self.generates_empty.insert(n.clone(), true);
+            trace!("true");
             return true;
         }
 
@@ -185,11 +186,13 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
                 .all(|s| self.symbol_generates_empty(productions, s, call_stack))
             {
                 self.generates_empty.insert(n.clone(), true);
+                trace!("true");
                 return true;
             }
         }
 
         self.generates_empty.insert(n.clone(), false);
+        trace!("false");
         false
     }
 
@@ -254,6 +257,9 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
         }
 
         self.first.insert(n.clone(), set.clone());
+
+        trace!("{:?}", &set);
+
         set
     }
 
@@ -313,6 +319,9 @@ impl<T: Eq + Hash + Clone, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
         }
 
         self.follow.insert(n.clone(), set.clone());
+
+        trace!("{:?}", &set);
+
         set
     }
 }
