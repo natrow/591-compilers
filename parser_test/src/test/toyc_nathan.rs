@@ -822,5 +822,7 @@ fn toyc_is_ll1() {
 
     debug!("made cfg: {:#?}", &cfg);
 
-    let _ll1 = LL1::new(cfg).unwrap();
+    let ll1 = LL1::new(cfg).unwrap();
+
+    println!("predict sets: {:#?}", ll1.get_predict_sets())
 }

@@ -20,6 +20,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
+    ops::Deref,
 };
 
 use log::{debug, trace};
@@ -38,7 +39,9 @@ pub enum Error<N: Eq + Hash + Clone + Debug> {
 /// An LL(1) grammar. This is a context-free grammar which has been verified to follow the rules.
 pub struct LL1<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> {
     /// Definition of the grammar
-    _cfg: ContextFreeGrammar<T, N>,
+    cfg: ContextFreeGrammar<T, N>,
+    /// Predict sets
+    predict_sets: HashMap<N, HashSet<T>>,
 }
 
 impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
@@ -79,6 +82,23 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         Ok(())
     }
 
+    /// Calculate the predict sets
+    fn predict_set(
+        memoize: &mut Memoize<T, N>,
+        productions: &Productions<T, N>,
+        n: &N,
+    ) -> HashSet<T> {
+        // start with FIRST(N)
+        let mut predict_set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
+
+        // if it generates the empty string, also include FOLLOW(N)
+        if memoize.nonterminal_generates_empty(productions, n, &mut [n].into()) {
+            predict_set.extend(memoize.follow_of_nonterminal(productions, n, &mut [n].into()));
+        }
+
+        predict_set
+    }
+
     /// Determines whether the context-free grammar is LL(1). Returns Ok() if true, or
     /// an error explaining why not.
     pub fn new(cfg: ContextFreeGrammar<T, N>) -> Result<Self, Error<N>> {
@@ -114,7 +134,27 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
             .iter()
             .try_for_each(|n| Self::llk_rule_2(&mut memoize, productions, n))?;
 
-        Ok(Self { _cfg: cfg })
+        // calculate predict sets
+        let predict_sets = cfg
+            .get_nonterminals()
+            .iter()
+            .map(|n| (n.clone(), Self::predict_set(&mut memoize, productions, n)))
+            .collect();
+
+        Ok(Self { cfg, predict_sets })
+    }
+
+    /// Get the predict sets of each non-terminal
+    pub fn get_predict_sets(&self) -> &HashMap<N, HashSet<T>> {
+        &self.predict_sets
+    }
+}
+
+impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Deref for LL1<T, N> {
+    type Target = ContextFreeGrammar<T, N>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cfg
     }
 }
 
@@ -205,7 +245,11 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
     ) -> HashSet<T> {
         match s {
             Symbol::Nonterminal(n) => {
-                assert!(call_stack.insert(n), "cycle detected");
+                assert!(
+                    call_stack.insert(n),
+                    "cycle detected, probably left-recursive (stack: {:#?})",
+                    call_stack
+                );
                 let res = self.first_of_nonterminal(productions, n, call_stack);
                 call_stack.remove(n);
                 res
