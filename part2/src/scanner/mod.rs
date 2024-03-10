@@ -79,7 +79,8 @@ impl Scanner {
     }
 
     /// Add context to a given error
-    fn context<T: Display>(&self, t: T) -> Context<T> {
+    #[allow(clippy::missing_panics_doc)] // constructor guarantees this won't panic
+    pub fn context<T: Display>(&self, t: T) -> Context<T> {
         self.file_buffer.context(t).unwrap()
     }
 

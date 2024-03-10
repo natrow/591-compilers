@@ -86,26 +86,36 @@ impl<T: Display> Display for Context<T> {
 }
 
 /// An error type that may or may not have locational context
-pub enum MaybeContext<E: Display> {
+pub enum MaybeContext<T: Display> {
     /// Variant that happens when there is locational context
-    Context(Context<E>),
+    Context(Context<T>),
     /// Variant that happens when there is no locational context
-    NoContext(E),
+    NoContext(T),
 }
 
-impl<E: Display> From<Context<E>> for MaybeContext<E> {
-    fn from(value: Context<E>) -> Self {
+impl<T: Display> MaybeContext<T> {
+    /// Allows the conversion from one error type to another while keeping the context the same.
+    pub fn map_kind<F: FnOnce(T) -> U, U: Display>(self, f: F) -> MaybeContext<U> {
+        match self {
+            MaybeContext::Context(e) => MaybeContext::Context(e.map_kind(f)),
+            MaybeContext::NoContext(e) => MaybeContext::NoContext(f(e)),
+        }
+    }
+}
+
+impl<T: Display> From<Context<T>> for MaybeContext<T> {
+    fn from(value: Context<T>) -> Self {
         Self::Context(value)
     }
 }
 
-impl<E: Display> From<E> for MaybeContext<E> {
-    fn from(value: E) -> Self {
+impl<T: Display> From<T> for MaybeContext<T> {
+    fn from(value: T) -> Self {
         Self::NoContext(value)
     }
 }
 
-impl<E: Display> Display for MaybeContext<E> {
+impl<T: Display> Display for MaybeContext<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MaybeContext::Context(c) => c.fmt(f),

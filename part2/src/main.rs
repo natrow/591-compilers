@@ -11,17 +11,19 @@
 
 use std::{path::PathBuf, process::ExitCode};
 
-use clap::{Parser, ValueEnum};
+use clap::{Parser as ClapParser, ValueEnum};
 use colored::Colorize;
 
 pub mod file_buffer;
+pub mod parser;
 pub mod scanner;
 
 use file_buffer::MaybeContext;
-use scanner::{error::Error as ScannerError, Scanner};
+use parser::{error::Error as ParserError, Parser};
+use scanner::Scanner;
 
 /// Command line arguments accepted by the scanner
-#[derive(Clone, PartialEq, Eq, Parser)]
+#[derive(Clone, PartialEq, Eq, ClapParser)]
 #[command(version, about)]
 struct Args {
     /// Display messages that aid in tracing the
@@ -42,6 +44,8 @@ enum DebugLevel {
     All,
     /// Scanner messages only
     Scanner,
+    /// Parser messages only
+    Parser,
 }
 
 fn main() -> ExitCode {
@@ -61,17 +65,18 @@ fn main() -> ExitCode {
     }
 
     let debug_scanner = matches!(args.debug, Some(DebugLevel::All | DebugLevel::Scanner));
+    let debug_parser = matches!(args.debug, Some(DebugLevel::All | DebugLevel::Parser));
 
     for path in args.input_files {
         // this is the Rust equivalent of the try-catch pattern
         let try_catch = || {
-            let scanner = Scanner::new(&path, debug_scanner, verbose)?;
+            let scanner = Scanner::new(&path, debug_scanner, verbose).map_err(ParserError::from)?;
 
-            // this will scan the entire file into a list of tokens
-            // instead, the parser would consume the iterator and return an AST
-            let tokens = scanner.collect::<Result<Vec<_>, _>>()?;
+            let parser = Parser::new(scanner, debug_parser, verbose)?;
 
-            Ok::<_, MaybeContext<ScannerError>>(tokens)
+            parser.parse()?;
+
+            Ok::<_, MaybeContext<ParserError>>(())
         };
 
         if let Err(e) = try_catch() {

@@ -61,7 +61,7 @@ impl Keyword {
     ];
 
     /// Convert keyword into string literal (static allocation)
-    pub const fn to_str(self) -> &'static str {
+    pub const fn to_str(&self) -> &'static str {
         match self {
             Keyword::Int => "int",
             Keyword::Do => "do",
@@ -83,7 +83,7 @@ impl Keyword {
     }
 
     /// Convert keyword into upper-case string literal (static allocation)
-    pub const fn to_upper(self) -> &'static str {
+    pub const fn to_upper(&self) -> &'static str {
         match self {
             Keyword::Int => "INT",
             Keyword::Do => "DO",
@@ -254,6 +254,79 @@ pub enum Token {
     Colon,
     /// End of File
     Eof,
+}
+
+impl Token {
+    /// Determines whether two tokens are syntactically equivalent.
+    ///
+    /// This ignores the attributes of tokens other than keywords and operators.
+    pub fn syntax_eq(&self, rhs: &Token) -> bool {
+        match (self, rhs) {
+            (Token::Keyword(l), Token::Keyword(r)) => l == r,
+            (Token::Identifier(_), Token::Identifier(_)) => true,
+            (Token::Number(_), Token::Number(_)) => true,
+            (Token::CharLiteral(_), Token::CharLiteral(_)) => true,
+            (Token::StringLiteral(_), Token::StringLiteral(_)) => true,
+            (Token::RelOp(l), Token::RelOp(r)) => l == r,
+            (Token::AddOp(l), Token::AddOp(r)) => l == r,
+            (Token::MulOp(l), Token::MulOp(r)) => l == r,
+            (Token::AssignOp, Token::AssignOp) => true,
+            (Token::LParen, Token::LParen) => true,
+            (Token::RParen, Token::RParen) => true,
+            (Token::LCurly, Token::LCurly) => true,
+            (Token::RCurly, Token::RCurly) => true,
+            (Token::LBracket, Token::LBracket) => true,
+            (Token::RBracket, Token::RBracket) => true,
+            (Token::Comma, Token::Comma) => true,
+            (Token::Semicolon, Token::Semicolon) => true,
+            (Token::Not, Token::Not) => true,
+            (Token::Colon, Token::Colon) => true,
+            (Token::Eof, Token::Eof) => true,
+            (_, _) => false,
+        }
+    }
+
+    /// Convert the token into string literal (static allocation)
+    pub const fn to_str(&self) -> &'static str {
+        match self {
+            Self::Keyword(k) => k.to_str(),
+            Self::Identifier(_) => "<identifier>",
+            Self::Number(_) => "<number>",
+            Self::CharLiteral(_) => "<char literal>",
+            Self::StringLiteral(_) => "<string literal>",
+            Self::RelOp(op) => match op {
+                RelOp::Eq => "==",
+                RelOp::Gt => ">",
+                RelOp::GtEq => ">=",
+                RelOp::Lt => "<",
+                RelOp::LtEq => "<=",
+                RelOp::Neq => "!=",
+            },
+            Self::AddOp(op) => match op {
+                AddOp::Add => "+",
+                AddOp::Sub => "-",
+                AddOp::BoolOr => "||",
+            },
+            Self::MulOp(op) => match op {
+                MulOp::BoolAnd => "&&",
+                MulOp::Div => "/",
+                MulOp::Mod => "%",
+                MulOp::Mul => "*",
+            },
+            Self::AssignOp => "=",
+            Self::LParen => "(",
+            Self::RParen => ")",
+            Self::LCurly => "{",
+            Self::RCurly => "}",
+            Self::LBracket => "[",
+            Self::RBracket => "]",
+            Self::Comma => "','",
+            Self::Semicolon => ";",
+            Self::Not => "!",
+            Self::Colon => ":",
+            Self::Eof => "<EOF>",
+        }
+    }
 }
 
 impl Display for Token {
