@@ -108,21 +108,21 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         // get productions
         let productions = cfg.get_productions();
 
-        // calculate first sets
-        for n in cfg.get_nonterminals() {
-            let set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
-            debug!("FIRST({:?}) = {:?}", n, set);
-        }
+        // // calculate first sets
+        // for n in cfg.get_nonterminals() {
+        //     let set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
+        //     debug!("FIRST({:?}) = {:?}", n, set);
+        // }
 
-        debug!("Finished calculating first sets!");
+        // debug!("Finished calculating first sets!");
 
-        // calculate follow sets
-        for n in cfg.get_nonterminals() {
-            let set = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
-            debug!("FOLLOW({:?}) = {:?}", n, set);
-        }
+        // // calculate follow sets
+        // for n in cfg.get_nonterminals() {
+        //     let set = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
+        //     debug!("FOLLOW({:?}) = {:?}", n, set);
+        // }
 
-        debug!("Finished calculating follow sets!");
+        // debug!("Finished calculating follow sets!");
 
         // apply rule 1
         cfg.get_nonterminals()
@@ -339,19 +339,27 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
                         ));
 
                         // if the rest of the rhs can generate the empty string, append the follow of the lhs of the production
-                        if !call_stack.contains(p.0)
+                        if p.0 != n
                             && p.1[i + 1..].iter().all(|s| {
                                 self.symbol_generates_empty(productions, s, &mut HashSet::new())
                             })
                         {
-                            call_stack.insert(p.0);
+                            assert!(
+                                call_stack.insert(p.0),
+                                "cycle detected, probably ambiguous production (stack: {:#?})",
+                                call_stack
+                            );
 
                             set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));
 
                             call_stack.remove(p.0);
                         }
-                    } else if !call_stack.contains(p.0) {
-                        call_stack.insert(p.0);
+                    } else if p.0 != n {
+                        assert!(
+                            call_stack.insert(p.0),
+                            "cycle detected, probably ambiguous production (stack: {:#?})",
+                            call_stack
+                        );
 
                         // otherwise append the follow of the lhs of the production
                         set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));

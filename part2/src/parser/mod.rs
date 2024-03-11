@@ -268,6 +268,7 @@ impl Parser {
             Semicolon => self.nt_null_statement(),
             Keyword(Return) => self.nt_return_statement(),
             Keyword(While) => self.nt_while_statement(),
+            Keyword(Read) => self.nt_read_statement(),
             Keyword(Write) => self.nt_write_statement(),
             Keyword(Newline) => self.nt_newline_statement(),
             _ => Err(self.expected(&[
@@ -414,44 +415,169 @@ impl Parser {
         }
     }
 
+    /// <if> <(> Expression <)> Statement IfStatement'
     fn nt_if_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing IfStatement");
+
+        self.take(Keyword(If))?;
+        self.take(LParen)?;
+        self.nt_expression()?;
+        self.take(RParen)?;
+        self.nt_statement()?;
+        self.nt_if_statement_()?;
+
+        Ok(())
     }
 
+    /// <else> Statement | ε
     fn nt_if_statement_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing IfStatement'");
+
+        match self.buffer {
+            Keyword(Else) => {
+                self.take(Keyword(Else))?;
+                self.nt_statement()?;
+
+                Ok(())
+            }
+            Keyword(Read | Newline | Write | While | Break | Return | If)
+            | Identifier(_)
+            | Number(_)
+            | StringLiteral(_)
+            | CharLiteral(_)
+            | AddOp(Sub)
+            | LCurly
+            | Not
+            | Semicolon
+            | LParen => Ok(()),
+            _ => Err(self.expected(&[
+                Keyword(Read),
+                Keyword(Newline),
+                Keyword(Write),
+                Keyword(While),
+                Keyword(Break),
+                Keyword(Return),
+                Keyword(If),
+                Keyword(Else),
+                Identifier(String::new()),
+                Number(String::new()),
+                StringLiteral(String::new()),
+                CharLiteral(None),
+                AddOp(Sub),
+                LCurly,
+                RCurly,
+                Not,
+                Semicolon,
+                LParen,
+            ])),
+        }
     }
 
+    /// <;>
     fn nt_null_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing NullStatement");
+
+        self.take(Semicolon)?;
+
+        Ok(())
     }
 
+    /// <return> ReturnStatement' <;>
     fn nt_return_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing ReturnStatement");
+
+        self.take(Keyword(Return))?;
+        self.nt_return_statement_()?;
+        self.take(Semicolon)?;
+
+        Ok(())
     }
 
+    /// Expression | ε
     fn nt_return_statement_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing ReturnStatement'");
+
+        match self.buffer {
+            AddOp(Sub) | LParen | StringLiteral(_) | CharLiteral(_) | Number(_) | Not
+            | Identifier(_) => self.nt_expression(),
+            Semicolon => Ok(()),
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                LParen,
+                StringLiteral(String::new()),
+                CharLiteral(None),
+                Number(String::new()),
+                Not,
+                Identifier(String::new()),
+            ])),
+        }
     }
 
+    /// <while> <(> Expression <)> Statement
     fn nt_while_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing WhileStatement");
+
+        self.take(Keyword(While))?;
+        self.take(LParen)?;
+        self.nt_expression()?;
+        self.take(RParen)?;
+        self.nt_statement()?;
+
+        Ok(())
     }
 
+    /// <read> <(> <identifier> ReadStatement' <)> <;>
     fn nt_read_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing ReadStatement");
+
+        self.take(Keyword(Read))?;
+        self.take(LParen)?;
+        self.take(Identifier(String::new()))?;
+        self.nt_read_statement_()?;
+        self.take(RParen)?;
+        self.take(Semicolon)?;
+
+        Ok(())
     }
 
+    /// <,> <identifier> ReadStatement' | ε
     fn nt_read_statement_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing ReadStatement'");
+
+        match self.buffer {
+            Comma => {
+                self.take(Comma)?;
+                self.take(Identifier(String::new()))?;
+                self.nt_read_statement_()?;
+
+                Ok(())
+            }
+            RParen => Ok(()),
+            _ => Err(self.expected(&[Comma, RParen])),
+        }
     }
 
+    /// <write> <(> ActualParameters <)> <;>
     fn nt_write_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing WriteStatement");
+
+        self.take(Keyword(Write))?;
+        self.take(LParen)?;
+        self.nt_actual_parameters()?;
+        self.take(RParen)?;
+        self.take(Semicolon)?;
+
+        Ok(())
     }
 
+    /// <newline> <;>
     fn nt_newline_statement(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing NewlineStatement");
+
+        self.take(Keyword(Newline))?;
+        self.take(Semicolon)?;
+
+        Ok(())
     }
 
     fn nt_expression(&mut self) -> Result<()> {
