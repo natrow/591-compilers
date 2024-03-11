@@ -15,6 +15,7 @@
         "RPAREN",
         "rustdoc",
         "toyc",
-        "Trevin"
+        "Trevin",
+        "variantless"
     ]
 }

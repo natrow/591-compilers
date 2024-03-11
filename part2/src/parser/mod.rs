@@ -1,6 +1,12 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
-use std::mem::take;
+use std::{
+    io::{Repeat, Take},
+    mem::take,
+    ops::Mul,
+    str::MatchIndices,
+    thread::sleep,
+};
 
 use crate::{
     file_buffer::Context,
@@ -16,7 +22,7 @@ use crate::{
 };
 
 pub mod error;
-use clap::Id;
+use clap::{command, Id};
 use error::Error;
 
 /// Short-hand version of Result<T, E> where E = Context<Error>
@@ -50,6 +56,38 @@ impl Parser {
             verbose,
             buffer: token,
         })
+    }
+
+    /// helper function for Err(self.expected(&[tokens])).
+    /// you can't pass MulOp(_), AddOP(_), RelOp(_) enums to self.expected() variants must be specified.
+    /// This function can take none specify variants and return the token slice reference the self.expects() requires
+    fn expected_variantless(&mut self, given: Vec<Token>) -> Result<()> {
+        let mut result: Vec<Token> = Vec::new();
+        for tok in given {
+            match tok {
+                MulOp(_) => result.append(&mut vec![
+                    MulOp(MulOp::Mul),
+                    MulOp(MulOp::Div),
+                    MulOp(MulOp::Mod),
+                    MulOp(MulOp::BoolAnd),
+                ]),
+
+                AddOp(_) => result.append(&mut vec![AddOp(Add), AddOp(Sub), AddOp(BoolOr)]),
+
+                RelOp(_) => result.append(&mut vec![
+                    RelOp(RelOp::Eq),
+                    RelOp(RelOp::Neq),
+                    RelOp(RelOp::Lt),
+                    RelOp(RelOp::LtEq),
+                    RelOp(RelOp::Gt),
+                    RelOp(RelOp::GtEq),
+                ]),
+
+                _ => result.append(&mut vec![tok]),
+            }
+        }
+
+        Err(self.expected(&result))
     }
 
     /// Parse into an AST, consuming the parser
@@ -278,7 +316,9 @@ impl Parser {
             Keyword(While) => self.nt_while_statement(),
             Keyword(Read) => self.nt_read_statement(),
             Keyword(Write) => self.nt_write_statement(),
+            Keyword(Read) => self.nt_read_statement(),
             Keyword(Newline) => self.nt_newline_statement(),
+
             _ => Err(self.expected(&[
                 Identifier(String::new()),
                 Number(String::new()),
@@ -569,13 +609,19 @@ impl Parser {
     fn nt_write_statement(&mut self) -> Result<()> {
         self.debug("reducing WriteStatement");
 
-        self.take(Keyword(Write))?;
-        self.take(LParen)?;
-        self.nt_actual_parameters()?;
-        self.take(RParen)?;
-        self.take(Semicolon)?;
+        match self.buffer {
+            Keyword(Write) => {
+                self.take(Keyword(Write))?;
+                self.take(LParen)?;
+                self.nt_actual_parameters()?;
+                self.take(RParen)?;
+                self.take(Semicolon)?;
 
-        Ok(())
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[Keyword(Write)])),
+        }
     }
 
     /// <newline> <;>
@@ -802,7 +848,7 @@ impl Parser {
                 _ => Err(self.expected(&[AddOp(Sub), AddOp(Add), AddOp(BoolOr)])),
             },
 
-            Semicolon | AssignOp | RelOp(_) | Comma | AddOp(_) | RParen => Ok(()),
+            Semicolon | AssignOp | RelOp(_) | Comma | RParen => Ok(()),
 
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -849,7 +895,7 @@ impl Parser {
 
     ///this function does the branching for term'
     /// because the take() can't take MulOP(_) as an argurment
-    fn termP_branching_helper(&mut self) -> Result<()> {
+    fn term_p_branching_helper(&mut self) -> Result<()> {
         match self.buffer {
             MulOp(MulOp::Mul) => {
                 self.take(MulOp(MulOp::Mul))?;
@@ -893,7 +939,7 @@ impl Parser {
         self.debug("reducing term'");
 
         match self.buffer {
-            MulOp(_) => self.termP_branching_helper(),
+            MulOp(_) => self.term_p_branching_helper(),
 
             AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(()),
 
@@ -920,20 +966,160 @@ impl Parser {
         }
     }
 
+    /// identifier primary'
+    /// | <number>
+    /// | <stringConstant>
+    /// | <charConstant>
+    /// | <(>Expression <)>
+    /// | <-> Primary
+    /// | <not> Primary
     fn nt_primary(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing primary");
+
+        match self.buffer {
+            Identifier(_) => {
+                self.take(Identifier(String::new()))?;
+
+                match self.buffer {
+                    //need to check if the identifier is followed my a function call
+                    LParen => {
+                        self.nt_primary_()?;
+                        Ok(())
+                    }
+                    //else wise it just an identifier
+                    _ => Ok(()),
+                }
+            }
+
+            Number(_) => {
+                self.take(Number(String::new()))?;
+                Ok(())
+            }
+
+            StringLiteral(_) => {
+                self.take(StringLiteral(String::new()))?;
+                Ok(())
+            }
+
+            CharLiteral(_) => {
+                self.take(CharLiteral(None))?;
+                Ok(())
+            }
+
+            LParen => {
+                self.take(LParen)?;
+                self.nt_expression()?;
+                self.take(RParen)?;
+                Ok(())
+            }
+
+            AddOp(Sub) => {
+                self.take(AddOp(Sub))?;
+                self.nt_primary()?;
+                Ok(())
+            }
+
+            Not => {
+                self.take(Not)?;
+                self.nt_primary()?;
+                Ok(())
+            }
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                LParen,
+                Number(String::new()),
+                CharLiteral(None),
+                Identifier(String::new()),
+                StringLiteral(String::new()),
+                Not,
+            ])),
+        }
     }
 
+    /// FunctionCall | ε
     fn nt_primary_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing primary'");
+
+        match self.buffer {
+            //LParen signal the begin of a function Call
+            LParen => {
+                self.nt_function_call()?;
+                Ok(())
+            }
+
+            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => Ok(()),
+
+            _ => Err(self.expected(&[
+                MulOp(MulOp::BoolAnd),
+                MulOp(MulOp::Div),
+                MulOp(MulOp::Mod),
+                MulOp(MulOp::Mul),
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                Comma,
+                Semicolon,
+                LParen,
+                RParen,
+                RelOp(RelOp::Gt),
+                RelOp(RelOp::GtEq),
+                RelOp(RelOp::Lt),
+                RelOp(RelOp::LtEq),
+                RelOp(RelOp::Eq),
+                RelOp(RelOp::Neq),
+                AssignOp,
+            ])),
+        }
     }
 
+    /// <(> FunctionCall' <)>
     fn nt_function_call(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing function call");
+
+        match self.buffer {
+            LParen => {
+                self.take(LParen)?;
+                self.nt_function_call_()?;
+                self.take(RParen)?;
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[LParen])),
+        }
     }
 
+    ///actualParameters | ε
     fn nt_function_call_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("Reducing functionCall'");
+        /*StringLiteral,
+        Identifier,
+        CharLiteral,
+        AddOp,
+        Number,
+        RParen,
+        Not,
+        LParen, */
+        match self.buffer {
+            StringLiteral(_) | Identifier(_) | CharLiteral(_) | AddOp(_) | Number(_) | Not
+            | LParen => {
+                self.nt_actual_parameters()?;
+                Ok(())
+            }
+
+            RParen => Ok(()),
+
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                LParen,
+                RParen,
+                StringLiteral(String::new()),
+                Identifier(String::new()),
+                CharLiteral(None),
+                Not,
+            ])),
+        }
     }
 
     ///Expression ActualParameters′
@@ -962,10 +1148,21 @@ impl Parser {
         }
     }
 
-    ///
+    ///<,> Expression ActualParameters′ | ε
     fn nt_actual_parameters_(&mut self) -> Result<()> {
-        todo!();
-        // self.
-        // Ok(())
+        self.debug("reducing actual parameters");
+
+        match self.buffer {
+            Comma => {
+                self.take(Comma)?;
+                self.nt_expression()?;
+                self.nt_actual_parameters_()?;
+                Ok(())
+            }
+
+            RParen => Ok(()),
+
+            _ => Err(self.expected(&[LParen, Comma])),
+        }
     }
 }
