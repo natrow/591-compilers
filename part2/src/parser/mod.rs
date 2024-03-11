@@ -1,14 +1,22 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
+use std::mem::take;
+
 use crate::{
     file_buffer::Context,
     scanner::{
-        token::{AddOp::*, Keyword::*, Token, Token::*},
+        token::{
+            AddOp::*,
+            Keyword::*,
+            MulOp, RelOp,
+            Token::{self, *},
+        },
         Scanner,
     },
 };
 
 pub mod error;
+use clap::Id;
 use error::Error;
 
 /// Short-hand version of Result<T, E> where E = Context<Error>
@@ -580,36 +588,336 @@ impl Parser {
         Ok(())
     }
 
+    ///RelopExpression Expression′
     fn nt_expression(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing expression");
+
+        match self.buffer {
+            Not | CharLiteral(_) | Number(_) | AddOp(_) | LParen | Identifier(_)
+            | StringLiteral(_) => {
+                self.nt_relop_expression()?;
+                self.nt_expression_()?;
+
+                Ok(())
+            }
+            _ => Err(self.expected(&[
+                LParen,
+                Not,
+                LParen,
+                CharLiteral(None),
+                StringLiteral(String::new()),
+                Identifier(String::new()),
+                Number(String::new()),
+                AddOp(Add),
+                AddOp(Sub),
+                AddOp(BoolOr),
+            ])),
+        }
     }
 
+    ///<assignop> RelopExpression Expression′ | ε
     fn nt_expression_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing expression'");
+
+        match self.buffer {
+            AssignOp => {
+                self.take(AssignOp)?;
+                self.nt_relop_expression()?;
+                self.nt_expression_()?;
+
+                Ok(())
+            }
+            Semicolon | RParen | Comma => Ok(()),
+            _ => Err(self.expected(&[Semicolon, Comma, AssignOp, RParen])),
+        }
     }
 
+    ///SimpleExpression RelopExpression′
     fn nt_relop_expression(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing relopExpression");
+
+        match self.buffer {
+            AddOp(_) | StringLiteral(_) | CharLiteral(_) | Not | Identifier(_) | Number(_)
+            | LParen => {
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+
+                Ok(())
+            }
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                StringLiteral(String::new()),
+                CharLiteral(None),
+                Not,
+                Identifier(String::new()),
+                Number(String::new()),
+                LParen,
+            ])),
+        }
     }
 
+    ///this function does the branching for nt_relop_expression()
+    /// because the self.take() can't take RelOP(_) as an argurment
+    fn relop_expression_helper_fn(&mut self) -> Result<()> {
+        match self.buffer {
+            RelOp(RelOp::Eq) => {
+                self.take(RelOp(RelOp::Eq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(RelOp::Lt) => {
+                self.take(RelOp(RelOp::Lt))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(RelOp::Gt) => {
+                self.take(RelOp(RelOp::Gt))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(RelOp::LtEq) => {
+                self.take(RelOp(RelOp::LtEq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(RelOp::GtEq) => {
+                self.take(RelOp(RelOp::GtEq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(RelOp::Neq) => {
+                self.take(RelOp(RelOp::Neq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[
+                RelOp(RelOp::Eq),
+                RelOp(RelOp::Neq),
+                RelOp(RelOp::Gt),
+                RelOp(RelOp::GtEq),
+                RelOp(RelOp::Lt),
+                RelOp(RelOp::LtEq),
+            ])),
+        }
+    }
+
+    ///<relop> SimpleExpression RelopExpression′ | ε
     fn nt_relop_expression_(&mut self) -> Result<()> {
-        todo!()
+        /*
+        AssignOp,
+        Comma,
+        RelOp,
+        RParen,
+        Semicolon,
+        */
+        self.debug("reducing relop expression'");
+
+        match self.buffer {
+            //todo: turn this into function
+            RelOp(_) => self.relop_expression_helper_fn(),
+
+            Semicolon | Comma | RParen | AssignOp => Ok(()),
+            _ => Err(self.expected(&[
+                AssignOp,
+                RParen,
+                RelOp(RelOp::Gt),
+                RelOp(RelOp::GtEq),
+                RelOp(RelOp::Lt),
+                RelOp(RelOp::LtEq),
+                RelOp(RelOp::Eq),
+                RelOp(RelOp::Neq),
+                Comma,
+                Semicolon,
+            ])),
+        }
     }
 
+    ///Term SimpleExpression′
     fn nt_simple_expression(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing simple expression");
+
+        match self.buffer {
+            StringLiteral(_) | AddOp(_) | CharLiteral(_) | Number(_) | Identifier(_) | LParen
+            | Not => {
+                self.nt_term()?;
+                self.nt_simple_expression_()?;
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[
+                StringLiteral(String::new()),
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                CharLiteral(None),
+                Number(String::new()),
+                Identifier(String::new()),
+                LParen,
+                Not,
+            ])),
+        }
     }
 
+    ///<addop> Term SimpleExpression′ | ε
     fn nt_simple_expression_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing simple expression'");
+
+        match self.buffer {
+            AddOp(_) => match self.buffer {
+                AddOp(Sub) => {
+                    self.take(AddOp(Sub))?;
+                    self.nt_simple_expression()?;
+                    self.nt_relop_expression_()?;
+                    Ok(())
+                }
+
+                AddOp(Add) => {
+                    self.take(AddOp(Add))?;
+                    self.nt_simple_expression()?;
+                    self.nt_relop_expression_()?;
+                    Ok(())
+                }
+
+                AddOp(BoolOr) => {
+                    self.take(AddOp(BoolOr))?;
+                    self.nt_simple_expression()?;
+                    self.nt_relop_expression_()?;
+                    Ok(())
+                }
+
+                _ => Err(self.expected(&[AddOp(Sub), AddOp(Add), AddOp(BoolOr)])),
+            },
+
+            Semicolon | AssignOp | RelOp(_) | Comma | AddOp(_) | RParen => Ok(()),
+
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                Semicolon,
+                AssignOp,
+                RelOp(RelOp::Eq),
+                RelOp(RelOp::Neq),
+                RelOp(RelOp::Gt),
+                RelOp(RelOp::GtEq),
+                RelOp(RelOp::Lt),
+                RelOp(RelOp::LtEq),
+                Comma,
+                RParen,
+            ])),
+        }
     }
 
+    ///Primary Term′
     fn nt_term(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing term");
+
+        match self.buffer {
+            StringLiteral(_) | CharLiteral(_) | LParen | AddOp(_) | Number(_) | Not
+            | Identifier(_) => {
+                self.nt_primary()?;
+                self.nt_term_()?;
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                StringLiteral(String::new()),
+                LParen,
+                Number(String::new()),
+                Not,
+                Identifier(String::new()),
+            ])),
+        }
     }
 
+    ///this function does the branching for term'
+    /// because the take() can't take MulOP(_) as an argurment
+    fn termP_branching_helper(&mut self) -> Result<()> {
+        match self.buffer {
+            MulOp(MulOp::Mul) => {
+                self.take(MulOp(MulOp::Mul))?;
+                self.nt_primary()?;
+                self.nt_term_()?;
+                Ok(())
+            }
+
+            MulOp(MulOp::Div) => {
+                self.take(MulOp(MulOp::Div))?;
+                self.nt_primary()?;
+                self.nt_term_()?;
+                Ok(())
+            }
+
+            MulOp(MulOp::Mod) => {
+                self.take(MulOp(MulOp::Mod))?;
+                self.nt_primary()?;
+                self.nt_term_()?;
+                Ok(())
+            }
+
+            MulOp(MulOp::BoolAnd) => {
+                self.take(MulOp(MulOp::BoolAnd))?;
+                self.nt_primary()?;
+                self.nt_term_()?;
+                Ok(())
+            }
+
+            _ => Err(self.expected(&[
+                MulOp(MulOp::BoolAnd),
+                MulOp(MulOp::Div),
+                MulOp(MulOp::Mod),
+                MulOp(MulOp::Mul),
+            ])),
+        }
+    }
+
+    ///<mulop> Primary Term′ | ε
     fn nt_term_(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing term'");
+
+        match self.buffer {
+            MulOp(_) => self.termP_branching_helper(),
+
+            AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(()),
+
+            _ => Err(self.expected(&[
+                MulOp(MulOp::BoolAnd),
+                MulOp(MulOp::Div),
+                MulOp(MulOp::Mod),
+                MulOp(MulOp::Mul),
+                AddOp(Sub),
+                AddOp(Add),
+                AddOp(BoolOr),
+                AddOp(BoolOr),
+                Comma,
+                Semicolon,
+                RParen,
+                RelOp(RelOp::Gt),
+                RelOp(RelOp::GtEq),
+                RelOp(RelOp::Lt),
+                RelOp(RelOp::LtEq),
+                RelOp(RelOp::Eq),
+                RelOp(RelOp::Neq),
+                AssignOp,
+            ])),
+        }
     }
 
     fn nt_primary(&mut self) -> Result<()> {
@@ -628,11 +936,36 @@ impl Parser {
         todo!()
     }
 
+    ///Expression ActualParameters′
     fn nt_actual_parameters(&mut self) -> Result<()> {
-        todo!()
+        self.debug("reducing actualExpression");
+
+        match self.buffer {
+            LParen | Not | LParen | CharLiteral(_) | StringLiteral(_) | Identifier(_)
+            | Number(_) | AddOp(Sub) //double check this addOP()
+            => {
+                self.nt_expression()?;
+                self.nt_actual_parameters_()?;
+
+                Ok(())
+            }
+            _ => Err(self.expected(&[
+                LParen,
+                Not,
+                LParen,
+                CharLiteral(None),
+                StringLiteral(String::new()),
+                Identifier(String::new()),
+                Number(String::new()),
+                AddOp(Sub), ////double check this AddOP()
+            ])),
+        }
     }
 
+    ///
     fn nt_actual_parameters_(&mut self) -> Result<()> {
-        todo!()
+        todo!();
+        // self.
+        // Ok(())
     }
 }
