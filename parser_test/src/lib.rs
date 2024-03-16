@@ -4,6 +4,7 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 pub mod cfg;
+mod compute;
 pub mod ll1;
 pub mod token;
 

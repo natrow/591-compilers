@@ -178,8 +178,39 @@ predict sets: {
     },
     "IfStatement'": {
         Keyword(
+            Read,
+        ),
+        Keyword(
+            While,
+        ),
+        Keyword(
+            Return,
+        ),
+        Keyword(
+            Break,
+        ),
+        Keyword(
+            If,
+        ),
+        Keyword(
+            Newline,
+        ),
+        Keyword(
             Else,
         ),
+        Keyword(
+            Write,
+        ),
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        LCurly,
+        RCurly,
+        Semicolon,
+        Not,
     },
     "NewLineStatement": {
         Keyword(

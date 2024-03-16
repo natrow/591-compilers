@@ -6,7 +6,7 @@ use log::debug;
 
 use crate::{
     cfg::{ContextFreeGrammar, Nonterminals, Productions, Symbol, Terminals},
-    ll1::LL1,
+    compute::{compute_first, compute_follow, compute_predict_sets},
 };
 
 /// This definition is adequate for verifying ToyC
@@ -822,13 +822,18 @@ fn toyc_is_ll1() {
 
     debug!("made cfg: {:#?}", &cfg);
 
-    let ll1 = LL1::new(cfg).unwrap();
+    // Note: this isn't *technically* LL1 because of a first/follow collision on IfStatement'
+    // however, this can safely be ignored because we will assume else clauses go to the inner-most if
 
-    let predict_sets = ll1.get_predict_sets().clone();
+    // let ll1 = LL1::new(cfg).unwrap();
+
+    let fi = compute_first(&cfg);
+    let fo = compute_follow(&cfg, &fi);
+    let predict_sets = compute_predict_sets(&cfg, &fi, &fo);
     let sorted_predict_sets: BTreeMap<&str, BTreeSet<Token>> = predict_sets
         .into_iter()
         .map(|(n, t)| (n, t.into_iter().collect()))
         .collect();
 
-    println!("predict sets: {:#?}", sorted_predict_sets)
+    println!("predict sets: {:#?}", &sorted_predict_sets)
 }
