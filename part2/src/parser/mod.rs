@@ -17,6 +17,9 @@ use crate::{
 pub mod error;
 use error::Error;
 
+pub mod ast;
+use ast::*;
+
 /// Short-hand version of Result<T, E> where E = Context<Error>
 type Result<T> = core::result::Result<T, Context<Error>>;
 
@@ -55,7 +58,7 @@ impl Parser {
     /// # Errors
     ///
     /// Errors can happen during scanning, I/O, or because of syntax errors in the input file.
-    pub fn parse(mut self) -> Result<()> {
+    pub fn parse(mut self) -> Result<Program> {
         self.nt_toy_c_program()
     }
 
@@ -69,17 +72,8 @@ impl Parser {
     fn load_next_token(&mut self) -> Result<()> {
         let token = self.scanner.next().unwrap()?;
         self.buffer = token;
-        Ok(())
+        todo!()
     }
-
-    /// Determines whether the buffer matches the predict set
-    // fn predict(&self, set: Vec<Token>) -> Result<()> {
-    //     if set.iter().any(|t| t.syntax_eq(&self.buffer)) {
-    //         Ok(())
-    //     } else {
-    //         Err(self.error(set))
-    //     }
-    // }
 
     /// Takes a token from the buffer, reloading it and returning the token
     fn take(&mut self, expected: Token) -> Result<Token> {
@@ -118,28 +112,27 @@ impl Parser {
     }
 
     /// ToyCProgram' <EOF>
-    fn nt_toy_c_program(&mut self) -> Result<()> {
+    fn nt_toy_c_program(&mut self) -> Result<Program> {
         self.debug("reducing ToyCProgram");
 
-        self.nt_toy_c_program_()?;
+        let mut definitions = Vec::new();
+        self.nt_toy_c_program_(&mut definitions)?;
 
         // don't call take because it will load the buffer after EOF, causing a panic
         match self.buffer {
-            Eof => Ok(()),
+            Eof => Ok(Program(definitions)),
             _ => Err(self.expected(&[Eof])),
         }
     }
 
     /// Definition ToyCProgram' | ε
-    fn nt_toy_c_program_(&mut self) -> Result<()> {
+    fn nt_toy_c_program_(&mut self, definitions: &mut Vec<Definition>) -> Result<()> {
         self.debug("reducing ToyCProgram'");
 
         match self.buffer {
             Keyword(Int | Char) => {
-                self.nt_definition()?;
-                self.nt_toy_c_program_()?;
-
-                Ok(())
+                definitions.push(self.nt_definition()?);
+                self.nt_toy_c_program_(definitions)
             }
             Eof => Ok(()),
             _ => Err(self.expected(&[Keyword(Int), Keyword(Char), Eof])),
@@ -147,105 +140,105 @@ impl Parser {
     }
 
     /// Type <identifier> Definition'
-    fn nt_definition(&mut self) -> Result<()> {
+    fn nt_definition(&mut self) -> Result<Definition> {
         self.debug("reducing Definition");
 
-        self.nt_type()?;
-        self.take(Identifier(String::new()))?;
-        self.nt_definition_()?;
+        let ast_type = self.nt_type()?;
 
-        Ok(())
+        let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        self.nt_definition_(ast_type, ast_id)
     }
 
     /// FunctionDefinition | <;>
-    fn nt_definition_(&mut self) -> Result<()> {
+    fn nt_definition_(&mut self, ast_type: Type, ast_id: String) -> Result<Definition> {
         self.debug("reducing Definition'");
 
         match self.buffer {
-            LParen => self.nt_function_definition(),
-            Semicolon => self.load_next_token(),
+            LParen => self.nt_function_definition(ast_type, ast_id),
+            Semicolon => {
+                self.load_next_token()?;
+                Ok(Definition::Var(vec![ast_id], ast_type))
+            }
             _ => Err(self.expected(&[LParen, Semicolon])),
         }
     }
 
     /// <int> | <char>
-    fn nt_type(&mut self) -> Result<()> {
+    fn nt_type(&mut self) -> Result<Type> {
         self.debug("reducing Type");
 
         match self.buffer {
-            Keyword(Int) | Keyword(Char) => self.load_next_token(),
+            Keyword(Int) | Keyword(Char) => {
+                let ast_type = self.buffer.clone().try_into().unwrap();
+                self.load_next_token()?;
+                Ok(ast_type)
+            }
             _ => Err(self.expected(&[Keyword(Int), Keyword(Char)])),
         }
     }
 
     /// FunctionHeader FunctionBody
-    fn nt_function_definition(&mut self) -> Result<()> {
+    fn nt_function_definition(&mut self, ast_type: Type, ast_id: String) -> Result<Definition> {
         self.debug("reducing FunctionDefinition");
 
-        self.nt_function_header()?;
-        self.nt_function_body()?;
+        let var_def = self.nt_function_header()?;
+        let statement = self.nt_function_body()?;
 
-        Ok(())
+        Ok(Definition::Func(ast_id, ast_type, var_def, statement))
     }
 
     /// <(> FunctionHeader' <)>
-    fn nt_function_header(&mut self) -> Result<()> {
+    fn nt_function_header(&mut self) -> Result<Vec<VarDef>> {
         self.debug("reducing FunctionHeader");
 
         self.take(LParen)?;
-        self.nt_function_header_()?;
+        let var_def = self.nt_function_header_()?;
         self.take(RParen)?;
 
-        Ok(())
+        Ok(var_def)
     }
 
     /// FormalParamList | ε
-    fn nt_function_header_(&mut self) -> Result<()> {
+    fn nt_function_header_(&mut self) -> Result<Vec<VarDef>> {
         self.debug("reducing FunctionHeader'");
 
         match self.buffer {
-            Keyword(Int) | Keyword(Char) => {
-                self.nt_formal_param_list()?;
-
-                Ok(())
-            }
-            RParen => Ok(()),
+            Keyword(Int) | Keyword(Char) => self.nt_formal_param_list(),
+            RParen => Ok(Vec::new()),
             _ => Err(self.expected(&[Keyword(Int), Keyword(Char), RParen])),
         }
     }
 
     /// CompoundStatement
-    fn nt_function_body(&mut self) -> Result<()> {
+    fn nt_function_body(&mut self) -> Result<Statement> {
         self.debug("reducing FunctionBody");
 
-        self.nt_compound_statement()?;
-
-        Ok(())
+        self.nt_compound_statement()
     }
 
     /// Type <identifier> FormalParamList'
-    fn nt_formal_param_list(&mut self) -> Result<()> {
+    fn nt_formal_param_list(&mut self) -> Result<Vec<VarDef>> {
         self.debug("reducing FormalParamList");
 
-        self.nt_type()?;
-        self.take(Identifier(String::new()))?;
-        self.nt_formal_param_list_()?;
+        let ast_type = self.nt_type()?;
+        let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        let mut var_def = vec![(vec![ast_id], ast_type)];
+        self.nt_formal_param_list_(&mut var_def)?;
 
-        Ok(())
+        Ok(var_def)
     }
 
     /// <,> Type <identifier> FormalParamList' | ε
-    fn nt_formal_param_list_(&mut self) -> Result<()> {
+    fn nt_formal_param_list_(&mut self, var_def: &mut Vec<VarDef>) -> Result<()> {
         self.debug("reducing FormalParamList'");
 
         match self.buffer {
             Comma => {
                 self.take(Comma)?;
-                self.nt_type()?;
-                self.take(Identifier(String::new()))?;
-                self.nt_formal_param_list_()?;
-
-                Ok(())
+                let ast_type = self.nt_type()?;
+                let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
+                var_def.push((vec![ast_id], ast_type));
+                self.nt_formal_param_list_(var_def)
             }
             RParen => Ok(()),
             _ => Err(self.expected(&[Comma, RParen])),
@@ -262,7 +255,7 @@ impl Parser {
     ///  | ReadStatement
     ///  | WriteStatement
     ///  | NewLineStatement
-    fn nt_statement(&mut self) -> Result<()> {
+    fn nt_statement(&mut self) -> Result<Statement> {
         self.debug("reducing Statement");
 
         match self.buffer {
@@ -300,49 +293,54 @@ impl Parser {
     }
 
     /// Expression <;>
-    fn nt_expression_statement(&mut self) -> Result<()> {
+    fn nt_expression_statement(&mut self) -> Result<Statement> {
         self.debug("reducing ExpressionStatement");
 
-        self.nt_expression()?;
+        let expression = self.nt_expression()?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Expr(expression))
     }
 
     /// <break> <;>
-    fn nt_break_statement(&mut self) -> Result<()> {
+    fn nt_break_statement(&mut self) -> Result<Statement> {
         self.debug("reducing BreakStatement");
 
         self.take(Keyword(Break))?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Break)
     }
 
     /// <{> CompoundStatement' CompoundStatement'' <}>
-    fn nt_compound_statement(&mut self) -> Result<()> {
+    fn nt_compound_statement(&mut self) -> Result<Statement> {
         self.debug("reducing CompoundStatement");
 
         self.take(LCurly)?;
-        self.nt_compound_statement_()?;
-        self.nt_compound_statement__()?;
+        let mut var_def = Vec::new();
+        self.nt_compound_statement_(&mut var_def)?;
+        let mut statements = Vec::new();
+        self.nt_compound_statement__(&mut statements)?;
         self.take(RCurly)?;
 
-        Ok(())
+        Ok(Statement::Block(var_def, statements))
     }
 
     /// Type <identifier> <;> CompoundStatement' | ε
-    fn nt_compound_statement_(&mut self) -> Result<()> {
+    fn nt_compound_statement_(&mut self, var_def: &mut Vec<VarDef>) -> Result<()> {
         self.debug("reducing CompoundStatement'");
 
         match self.buffer {
             Keyword(Int | Char) => {
-                self.nt_type()?;
-                self.take(Identifier(String::new()))?;
+                let ast_type = self.nt_type()?;
+                let ast_id = self
+                    .take(Identifier(String::new()))?
+                    .clone()
+                    .try_into()
+                    .unwrap();
+                var_def.push((vec![ast_id], ast_type));
                 self.take(Semicolon)?;
-                self.nt_compound_statement_()?;
-
-                Ok(())
+                self.nt_compound_statement_(var_def)
             }
             Keyword(Read | Newline | Write | While | Break | Return | If)
             | Identifier(_)
@@ -354,7 +352,7 @@ impl Parser {
             | RCurly
             | Not
             | Semicolon
-            | LParen => Ok(()),
+            | LParen => todo!(),
             _ => Err(self.expected(&[
                 Keyword(Int),
                 Keyword(Char),
@@ -380,7 +378,7 @@ impl Parser {
     }
 
     /// Statement CompoundStatement'' | ε
-    fn nt_compound_statement__(&mut self) -> Result<()> {
+    fn nt_compound_statement__(&mut self, statements: &mut Vec<Statement>) -> Result<()> {
         self.debug("reducing CompoundStatement''");
 
         match self.buffer {
@@ -394,12 +392,11 @@ impl Parser {
             | Not
             | Semicolon
             | LParen => {
-                self.nt_statement()?;
-                self.nt_compound_statement__()?;
-
-                Ok(())
+                let statement = self.nt_statement()?;
+                statements.push(statement);
+                self.nt_compound_statement__(statements)
             }
-            RCurly => Ok(()),
+            RCurly => todo!(),
             _ => Err(self.expected(&[
                 Keyword(Read),
                 Keyword(Newline),
@@ -423,29 +420,29 @@ impl Parser {
     }
 
     /// <if> <(> Expression <)> Statement IfStatement'
-    fn nt_if_statement(&mut self) -> Result<()> {
+    fn nt_if_statement(&mut self) -> Result<Statement> {
         self.debug("reducing IfStatement");
 
         self.take(Keyword(If))?;
         self.take(LParen)?;
-        self.nt_expression()?;
+        let expression = self.nt_expression()?;
         self.take(RParen)?;
-        self.nt_statement()?;
-        self.nt_if_statement_()?;
+        let true_statement = Box::new(self.nt_statement()?);
+        let false_statement = self.nt_if_statement_()?.map(Box::new);
 
-        Ok(())
+        Ok(Statement::If(expression, true_statement, false_statement))
     }
 
     /// <else> Statement | ε
-    fn nt_if_statement_(&mut self) -> Result<()> {
+    fn nt_if_statement_(&mut self) -> Result<Option<Statement>> {
         self.debug("reducing IfStatement'");
 
         match self.buffer {
             Keyword(Else) => {
                 self.take(Keyword(Else))?;
-                self.nt_statement()?;
+                let statement = self.nt_statement()?;
 
-                Ok(())
+                Ok(Some(statement))
             }
             Keyword(Read | Newline | Write | While | Break | Return | If)
             | Identifier(_)
@@ -456,7 +453,7 @@ impl Parser {
             | LCurly
             | Not
             | Semicolon
-            | LParen => Ok(()),
+            | LParen => Ok(None),
             _ => Err(self.expected(&[
                 Keyword(Read),
                 Keyword(Newline),
@@ -481,33 +478,36 @@ impl Parser {
     }
 
     /// <;>
-    fn nt_null_statement(&mut self) -> Result<()> {
+    fn nt_null_statement(&mut self) -> Result<Statement> {
         self.debug("reducing NullStatement");
 
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Null)
     }
 
     /// <return> ReturnStatement' <;>
-    fn nt_return_statement(&mut self) -> Result<()> {
+    fn nt_return_statement(&mut self) -> Result<Statement> {
         self.debug("reducing ReturnStatement");
 
         self.take(Keyword(Return))?;
-        self.nt_return_statement_()?;
+        let expression = self.nt_return_statement_()?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Return(expression))
     }
 
     /// Expression | ε
-    fn nt_return_statement_(&mut self) -> Result<()> {
+    fn nt_return_statement_(&mut self) -> Result<Option<Expression>> {
         self.debug("reducing ReturnStatement'");
 
         match self.buffer {
             AddOp(Sub) | LParen | StringLiteral(_) | CharLiteral(_) | Number(_) | Not
-            | Identifier(_) => self.nt_expression(),
-            Semicolon => Ok(()),
+            | Identifier(_) => {
+                let expression = self.nt_expression()?;
+                Ok(Some(expression))
+            }
+            Semicolon => Ok(None),
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 LParen,
@@ -521,43 +521,51 @@ impl Parser {
     }
 
     /// <while> <(> Expression <)> Statement
-    fn nt_while_statement(&mut self) -> Result<()> {
+    fn nt_while_statement(&mut self) -> Result<Statement> {
         self.debug("reducing WhileStatement");
 
         self.take(Keyword(While))?;
         self.take(LParen)?;
-        self.nt_expression()?;
+        let expression = self.nt_expression()?;
         self.take(RParen)?;
-        self.nt_statement()?;
+        let statement = Box::new(self.nt_statement()?);
 
-        Ok(())
+        Ok(Statement::While(expression, statement))
     }
 
     /// <read> <(> <identifier> ReadStatement' <)> <;>
-    fn nt_read_statement(&mut self) -> Result<()> {
+    fn nt_read_statement(&mut self) -> Result<Statement> {
         self.debug("reducing ReadStatement");
 
         self.take(Keyword(Read))?;
         self.take(LParen)?;
-        self.take(Identifier(String::new()))?;
-        self.nt_read_statement_()?;
+        let ast_id = self
+            .take(Identifier(String::new()))?
+            .clone()
+            .try_into()
+            .unwrap();
+        let mut ids = vec![ast_id];
+        self.nt_read_statement_(&mut ids)?;
         self.take(RParen)?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Read(ids))
     }
 
     /// <,> <identifier> ReadStatement' | ε
-    fn nt_read_statement_(&mut self) -> Result<()> {
+    fn nt_read_statement_(&mut self, ids: &mut Vec<String>) -> Result<()> {
         self.debug("reducing ReadStatement'");
 
         match self.buffer {
             Comma => {
                 self.take(Comma)?;
-                self.take(Identifier(String::new()))?;
-                self.nt_read_statement_()?;
-
-                Ok(())
+                let ast_id = self
+                    .take(Identifier(String::new()))?
+                    .clone()
+                    .try_into()
+                    .unwrap();
+                ids.push(ast_id);
+                self.nt_read_statement_(ids)
             }
             RParen => Ok(()),
             _ => Err(self.expected(&[Comma, RParen])),
@@ -565,31 +573,31 @@ impl Parser {
     }
 
     /// <write> <(> ActualParameters <)> <;>
-    fn nt_write_statement(&mut self) -> Result<()> {
+    fn nt_write_statement(&mut self) -> Result<Statement> {
         self.debug("reducing WriteStatement");
 
         self.take(Keyword(Write))?;
         self.take(LParen)?;
-        self.nt_actual_parameters()?;
+        let params = self.nt_actual_parameters()?;
         self.take(RParen)?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Write(params))
     }
 
     /// <newline> <;>
-    fn nt_newline_statement(&mut self) -> Result<()> {
+    fn nt_newline_statement(&mut self) -> Result<Statement> {
         self.debug("reducing NewlineStatement");
 
         self.take(Keyword(Newline))?;
         self.take(Semicolon)?;
 
-        Ok(())
+        Ok(Statement::Newline)
     }
 
-    ///RelopExpression Expression′
-    fn nt_expression(&mut self) -> Result<()> {
-        self.debug("reducing expression");
+    /// RelopExpression Expression'
+    fn nt_expression(&mut self) -> Result<Expression> {
+        self.debug("reducing Expression");
 
         match self.buffer {
             Not | CharLiteral(_) | Number(_) | AddOp(_) | LParen | Identifier(_)
@@ -597,7 +605,7 @@ impl Parser {
                 self.nt_relop_expression()?;
                 self.nt_expression_()?;
 
-                Ok(())
+                todo!()
             }
             _ => Err(self.expected(&[
                 LParen,
@@ -614,9 +622,9 @@ impl Parser {
         }
     }
 
-    ///<assignop> RelopExpression Expression′ | ε
+    /// <assignop> RelopExpression Expression' | ε
     fn nt_expression_(&mut self) -> Result<()> {
-        self.debug("reducing expression'");
+        self.debug("reducing Expression'");
 
         match self.buffer {
             AssignOp => {
@@ -624,16 +632,16 @@ impl Parser {
                 self.nt_relop_expression()?;
                 self.nt_expression_()?;
 
-                Ok(())
+                todo!()
             }
-            Semicolon | RParen | Comma => Ok(()),
+            Semicolon | RParen | Comma => todo!(),
             _ => Err(self.expected(&[Semicolon, Comma, AssignOp, RParen])),
         }
     }
 
-    ///SimpleExpression RelopExpression′
+    /// SimpleExpression RelopExpression'
     fn nt_relop_expression(&mut self) -> Result<()> {
-        self.debug("reducing relopExpression");
+        self.debug("reducing RelopExpression");
 
         match self.buffer {
             AddOp(_) | StringLiteral(_) | CharLiteral(_) | Not | Identifier(_) | Number(_)
@@ -641,7 +649,7 @@ impl Parser {
                 self.nt_simple_expression()?;
                 self.nt_relop_expression_()?;
 
-                Ok(())
+                todo!()
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -657,54 +665,19 @@ impl Parser {
         }
     }
 
-    ///<relop> SimpleExpression RelopExpression′ | ε
+    ///<relop> SimpleExpression RelopExpression' | ε
     fn nt_relop_expression_(&mut self) -> Result<()> {
-        self.debug("reducing relop expression'");
+        self.debug("reducing RelopExpression'");
 
         match self.buffer {
-            RelOp(Eq) => {
-                self.take(RelOp(Eq))?;
+            RelOp(_) => {
+                self.load_next_token()?;
                 self.nt_simple_expression()?;
                 self.nt_relop_expression_()?;
-                Ok(())
-            }
 
-            RelOp(Lt) => {
-                self.take(RelOp(Lt))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
+                todo!()
             }
-
-            RelOp(Gt) => {
-                self.take(RelOp(Gt))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(LtEq) => {
-                self.take(RelOp(LtEq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(GtEq) => {
-                self.take(RelOp(GtEq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(Neq) => {
-                self.take(RelOp(Neq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            Semicolon | Comma | RParen | AssignOp => Ok(()),
+            Semicolon | Comma | RParen | AssignOp => todo!(),
             _ => Err(self.expected(&[
                 AssignOp,
                 RParen,
@@ -720,18 +693,18 @@ impl Parser {
         }
     }
 
-    ///Term SimpleExpression′
+    /// Term SimpleExpression'
     fn nt_simple_expression(&mut self) -> Result<()> {
-        self.debug("reducing simple expression");
+        self.debug("reducing SimpleExpression");
 
         match self.buffer {
             StringLiteral(_) | AddOp(_) | CharLiteral(_) | Number(_) | Identifier(_) | LParen
             | Not => {
                 self.nt_term()?;
                 self.nt_simple_expression_()?;
-                Ok(())
-            }
 
+                todo!()
+            }
             _ => Err(self.expected(&[
                 StringLiteral(String::new()),
                 AddOp(Sub),
@@ -746,38 +719,19 @@ impl Parser {
         }
     }
 
-    ///<addop> Term SimpleExpression′ | ε
+    /// <addop> Term SimpleExpression' | ε
     fn nt_simple_expression_(&mut self) -> Result<()> {
-        self.debug("reducing simple expression'");
+        self.debug("reducing SimpleExpression'");
 
         match self.buffer {
-            AddOp(_) => match self.buffer {
-                AddOp(Sub) => {
-                    self.take(AddOp(Sub))?;
-                    self.nt_simple_expression()?;
-                    self.nt_relop_expression_()?;
-                    Ok(())
-                }
+            AddOp(_) => {
+                self.load_next_token()?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
 
-                AddOp(Add) => {
-                    self.take(AddOp(Add))?;
-                    self.nt_simple_expression()?;
-                    self.nt_relop_expression_()?;
-                    Ok(())
-                }
-
-                AddOp(BoolOr) => {
-                    self.take(AddOp(BoolOr))?;
-                    self.nt_simple_expression()?;
-                    self.nt_relop_expression_()?;
-                    Ok(())
-                }
-
-                _ => Err(self.expected(&[AddOp(Sub), AddOp(Add), AddOp(BoolOr)])),
-            },
-
-            Semicolon | AssignOp | RelOp(_) | Comma | RParen => Ok(()),
-
+                todo!()
+            }
+            Semicolon | AssignOp | RelOp(_) | Comma | RParen => todo!(),
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 AddOp(Add),
@@ -796,18 +750,18 @@ impl Parser {
         }
     }
 
-    ///Primary Term′
+    /// Primary Term'
     fn nt_term(&mut self) -> Result<()> {
-        self.debug("reducing term");
+        self.debug("reducing Term");
 
         match self.buffer {
             StringLiteral(_) | CharLiteral(_) | LParen | AddOp(_) | Number(_) | Not
             | Identifier(_) => {
                 self.nt_primary()?;
                 self.nt_term_()?;
-                Ok(())
-            }
 
+                todo!()
+            }
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 AddOp(Add),
@@ -821,51 +775,19 @@ impl Parser {
         }
     }
 
-    ///this function does the branching for term'
-    /// because the take() can't take MulOP(_) as an argurment
-    fn term_p_branching_helper(&mut self) -> Result<()> {
-        match self.buffer {
-            MulOp(Mul) => {
-                self.take(MulOp(Mul))?;
-                self.nt_primary()?;
-                self.nt_term_()?;
-                Ok(())
-            }
-
-            MulOp(Div) => {
-                self.take(MulOp(Div))?;
-                self.nt_primary()?;
-                self.nt_term_()?;
-                Ok(())
-            }
-
-            MulOp(Mod) => {
-                self.take(MulOp(Mod))?;
-                self.nt_primary()?;
-                self.nt_term_()?;
-                Ok(())
-            }
-
-            MulOp(BoolAnd) => {
-                self.take(MulOp(BoolAnd))?;
-                self.nt_primary()?;
-                self.nt_term_()?;
-                Ok(())
-            }
-
-            _ => Err(self.expected(&[MulOp(BoolAnd), MulOp(Div), MulOp(Mod), MulOp(Mul)])),
-        }
-    }
-
-    ///<mulop> Primary Term′ | ε
+    /// <mulop> Primary Term' | ε
     fn nt_term_(&mut self) -> Result<()> {
-        self.debug("reducing term'");
+        self.debug("reducing Term'");
 
         match self.buffer {
-            MulOp(_) => self.term_p_branching_helper(),
+            MulOp(_) => {
+                self.load_next_token()?;
+                self.nt_primary()?;
+                self.nt_term_()?;
 
-            AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(()),
-
+                todo!()
+            }
+            AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => todo!(),
             _ => Err(self.expected(&[
                 MulOp(BoolAnd),
                 MulOp(Div),
@@ -889,63 +811,56 @@ impl Parser {
         }
     }
 
-    /// identifier primary'
-    /// | <number>
-    /// | <stringConstant>
-    /// | <charConstant>
-    /// | <(>Expression <)>
+    /// Identifier Primary'
+    /// | <Number>
+    /// | <StringConstant>
+    /// | <CharConstant>
+    /// | <(> Expression <)>
     /// | <-> Primary
-    /// | <not> Primary
+    /// | <Not> Primary
     fn nt_primary(&mut self) -> Result<()> {
-        self.debug("reducing primary");
+        self.debug("reducing Primary");
 
         match self.buffer {
             Identifier(_) => {
                 self.take(Identifier(String::new()))?;
+                self.nt_primary_()?;
 
-                match self.buffer {
-                    //need to check if the identifier is followed my a function call
-                    LParen => {
-                        self.nt_primary_()?;
-                        Ok(())
-                    }
-                    //else wise it just an identifier
-                    _ => Ok(()),
-                }
+                todo!();
             }
-
             Number(_) => {
                 self.take(Number(String::new()))?;
-                Ok(())
-            }
 
+                todo!()
+            }
             StringLiteral(_) => {
                 self.take(StringLiteral(String::new()))?;
-                Ok(())
-            }
 
+                todo!()
+            }
             CharLiteral(_) => {
                 self.take(CharLiteral(None))?;
-                Ok(())
-            }
 
+                todo!()
+            }
             LParen => {
                 self.take(LParen)?;
                 self.nt_expression()?;
                 self.take(RParen)?;
-                Ok(())
-            }
 
+                todo!()
+            }
             AddOp(Sub) => {
                 self.take(AddOp(Sub))?;
                 self.nt_primary()?;
-                Ok(())
-            }
 
+                todo!()
+            }
             Not => {
                 self.take(Not)?;
                 self.nt_primary()?;
-                Ok(())
+
+                todo!()
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -961,17 +876,14 @@ impl Parser {
 
     /// FunctionCall | ε
     fn nt_primary_(&mut self) -> Result<()> {
-        self.debug("reducing primary'");
+        self.debug("reducing Primary'");
 
         match self.buffer {
-            //LParen signal the begin of a function Call
             LParen => {
                 self.nt_function_call()?;
-                Ok(())
+                todo!()
             }
-
-            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => Ok(()),
-
+            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => todo!(),
             _ => Err(self.expected(&[
                 MulOp(BoolAnd),
                 MulOp(Div),
@@ -1004,33 +916,25 @@ impl Parser {
                 self.take(LParen)?;
                 self.nt_function_call_()?;
                 self.take(RParen)?;
-                Ok(())
+                todo!()
             }
 
             _ => Err(self.expected(&[LParen])),
         }
     }
 
-    ///actualParameters | ε
+    /// ActualParameters | ε
     fn nt_function_call_(&mut self) -> Result<()> {
-        self.debug("Reducing functionCall'");
-        /*StringLiteral,
-        Identifier,
-        CharLiteral,
-        AddOp,
-        Number,
-        RParen,
-        Not,
-        LParen, */
+        self.debug("Reducing FunctionCall'");
+
         match self.buffer {
             StringLiteral(_) | Identifier(_) | CharLiteral(_) | AddOp(_) | Number(_) | Not
             | LParen => {
                 self.nt_actual_parameters()?;
-                Ok(())
+
+                todo!()
             }
-
-            RParen => Ok(()),
-
+            RParen => todo!(),
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 AddOp(Add),
@@ -1045,18 +949,18 @@ impl Parser {
         }
     }
 
-    ///Expression ActualParameters′
-    fn nt_actual_parameters(&mut self) -> Result<()> {
-        self.debug("reducing actualExpression");
+    /// Expression ActualParameters'
+    fn nt_actual_parameters(&mut self) -> Result<Vec<Expression>> {
+        self.debug("reducing ActualExpression");
 
         match self.buffer {
-            LParen | Not | CharLiteral(_) | StringLiteral(_) | Identifier(_)
-            | Number(_) | AddOp(Sub) //double check this addOP()
-            => {
-                self.nt_expression()?;
-                self.nt_actual_parameters_()?;
+            LParen | Not | CharLiteral(_) | StringLiteral(_) | Identifier(_) | Number(_)
+            | AddOp(Sub) => {
+                let expression = self.nt_expression()?;
+                let mut expressions = vec![expression];
+                self.nt_actual_parameters_(&mut expressions)?;
 
-                Ok(())
+                Ok(expressions)
             }
             _ => Err(self.expected(&[
                 LParen,
@@ -1071,20 +975,18 @@ impl Parser {
         }
     }
 
-    ///<,> Expression ActualParameters′ | ε
-    fn nt_actual_parameters_(&mut self) -> Result<()> {
-        self.debug("reducing actual parameters");
+    /// <,> Expression ActualParameters' | ε
+    fn nt_actual_parameters_(&mut self, expressions: &mut Vec<Expression>) -> Result<()> {
+        self.debug("reducing ActualParameters");
 
         match self.buffer {
             Comma => {
                 self.take(Comma)?;
-                self.nt_expression()?;
-                self.nt_actual_parameters_()?;
-                Ok(())
+                let expression = self.nt_expression()?;
+                expressions.push(expression);
+                self.nt_actual_parameters_(expressions)
             }
-
             RParen => Ok(()),
-
             _ => Err(self.expected(&[LParen, Comma])),
         }
     }
