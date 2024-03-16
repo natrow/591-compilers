@@ -23,7 +23,7 @@ use std::{
     ops::Deref,
 };
 
-use log::{debug, trace};
+use log::{debug, trace, warn};
 
 use crate::cfg::{ContextFreeGrammar, Productions, Symbol};
 
@@ -71,10 +71,16 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         n: &N,
     ) -> Result<(), Error<N>> {
         if memoize.nonterminal_generates_empty(productions, n, &mut [n].into()) {
+            warn!("evaluating rule 2 of {:?}", n);
+
             let first = memoize.first_of_nonterminal(productions, n, &mut [n].into());
             let follow = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
 
             if !first.is_disjoint(&follow) {
+                println!(
+                    "{:?} failed rule 2: (first = {:?}, follow = {:?})",
+                    n, first, follow
+                );
                 return Err(Error::Rule2(n.clone()));
             }
         }
@@ -108,19 +114,19 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> LL1<T, N> {
         // get productions
         let productions = cfg.get_productions();
 
-        // // calculate first sets
-        // for n in cfg.get_nonterminals() {
-        //     let set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
-        //     debug!("FIRST({:?}) = {:?}", n, set);
-        // }
+        // calculate first sets
+        for n in cfg.get_nonterminals() {
+            let set = memoize.first_of_nonterminal(productions, n, &mut [n].into());
+            debug!("FIRST({:?}) = {:?}", n, set);
+        }
 
-        // debug!("Finished calculating first sets!");
+        debug!("Finished calculating first sets!");
 
-        // // calculate follow sets
-        // for n in cfg.get_nonterminals() {
-        //     let set = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
-        //     debug!("FOLLOW({:?}) = {:?}", n, set);
-        // }
+        // calculate follow sets
+        for n in cfg.get_nonterminals() {
+            let set = memoize.follow_of_nonterminal(productions, n, &mut [n].into());
+            debug!("FOLLOW({:?}) = {:?}", n, set);
+        }
 
         // debug!("Finished calculating follow sets!");
 
@@ -316,6 +322,7 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
     ) -> HashSet<T> {
         // if the follow set is already calculated, return it
         if let Some(v) = self.follow.get(n) {
+            trace!("Using cached follow of {:?} : {:?}", n, v);
             return v.clone();
         }
 
@@ -324,55 +331,40 @@ impl<T: Eq + Hash + Clone + Debug, N: Eq + Hash + Clone + Debug> Memoize<T, N> {
         // otherwise calculate the set
         let mut set = HashSet::new();
 
-        for p in productions
+        // iterate through all production rules
+        for (lhs, rhs) in productions
             .iter()
+            .filter(|(lhs, _)| n != *lhs)
             .flat_map(|p| p.1.iter().map(move |s| (p.0, s)))
         {
-            for (i, s) in p.1.iter().enumerate() {
-                if s == n {
-                    // if the rest of rhs is non-empty, add the first terminal in the remainder of rhs
-                    if i + 1 < p.1.len() {
-                        set.extend(self.first_of_rhs(
-                            productions,
-                            &p.1[i + 1..],
-                            &mut HashSet::new(),
-                        ));
+            // iterate through rhs and find all indexes where the symbol is equal to n
+            let indexes = rhs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, s)| if s == n { Some(i) } else { None });
 
-                        // if the rest of the rhs can generate the empty string, append the follow of the lhs of the production
-                        if p.0 != n
-                            && p.1[i + 1..].iter().all(|s| {
-                                self.symbol_generates_empty(productions, s, &mut HashSet::new())
-                            })
-                        {
-                            assert!(
-                                call_stack.insert(p.0),
-                                "cycle detected, probably ambiguous production (stack: {:#?})",
-                                call_stack
-                            );
+            for i in indexes {
+                // include the first of the rhs
+                set.extend(self.first_of_rhs(productions, &rhs[i + 1..], &mut HashSet::new()));
 
-                            set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));
+                // if the rest of the rhs generates the empty string, include its follow as well
+                if rhs[i + 1..]
+                    .iter()
+                    .all(|s| self.symbol_generates_empty(productions, s, &mut HashSet::new()))
+                    && !call_stack.contains(lhs)
+                {
+                    call_stack.insert(lhs);
 
-                            call_stack.remove(p.0);
-                        }
-                    } else if p.0 != n {
-                        assert!(
-                            call_stack.insert(p.0),
-                            "cycle detected, probably ambiguous production (stack: {:#?})",
-                            call_stack
-                        );
+                    set.extend(self.follow_of_nonterminal(productions, lhs, call_stack));
 
-                        // otherwise append the follow of the lhs of the production
-                        set.extend(self.follow_of_nonterminal(productions, p.0, call_stack));
-
-                        call_stack.remove(p.0);
-                    }
+                    call_stack.remove(lhs);
                 }
             }
         }
 
         self.follow.insert(n.clone(), set.clone());
 
-        trace!("{:?}", &set);
+        trace!("Got follow of {:?}: {:?}", n, &set);
 
         set
     }

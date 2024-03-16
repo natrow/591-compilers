@@ -569,7 +569,7 @@ fn toyc_is_ll1() {
             vec![nt_expression_statement()],
             vec![nt_break_statement()],
             vec![nt_compound_statement()],
-            // vec![nt_if_statement()], // causes crash - todo : remove ambiguity
+            vec![nt_if_statement()],
             vec![nt_null_statement()],
             vec![nt_return_statement()],
             vec![nt_while_statement()],
