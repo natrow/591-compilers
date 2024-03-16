@@ -72,7 +72,7 @@ impl Parser {
     fn load_next_token(&mut self) -> Result<()> {
         let token = self.scanner.next().unwrap()?;
         self.buffer = token;
-        todo!()
+        Ok(())
     }
 
     /// Takes a token from the buffer, reloading it and returning the token
@@ -875,15 +875,12 @@ impl Parser {
     }
 
     /// FunctionCall | ε
-    fn nt_primary_(&mut self) -> Result<()> {
+    fn nt_primary_(&mut self) -> Result<Option<Vec<Expression>>> {
         self.debug("reducing Primary'");
 
         match self.buffer {
-            LParen => {
-                self.nt_function_call()?;
-                todo!()
-            }
-            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => todo!(),
+            LParen => Ok(Some(self.nt_function_call()?)),
+            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => Ok(None),
             _ => Err(self.expected(&[
                 MulOp(BoolAnd),
                 MulOp(Div),
@@ -908,15 +905,15 @@ impl Parser {
     }
 
     /// <(> FunctionCall' <)>
-    fn nt_function_call(&mut self) -> Result<()> {
+    fn nt_function_call(&mut self) -> Result<Vec<Expression>> {
         self.debug("reducing function call");
 
         match self.buffer {
             LParen => {
                 self.take(LParen)?;
-                self.nt_function_call_()?;
+                let expressions = self.nt_function_call_()?;
                 self.take(RParen)?;
-                todo!()
+                Ok(expressions)
             }
 
             _ => Err(self.expected(&[LParen])),
@@ -924,17 +921,13 @@ impl Parser {
     }
 
     /// ActualParameters | ε
-    fn nt_function_call_(&mut self) -> Result<()> {
+    fn nt_function_call_(&mut self) -> Result<Vec<Expression>> {
         self.debug("Reducing FunctionCall'");
 
         match self.buffer {
             StringLiteral(_) | Identifier(_) | CharLiteral(_) | AddOp(_) | Number(_) | Not
-            | LParen => {
-                self.nt_actual_parameters()?;
-
-                todo!()
-            }
-            RParen => todo!(),
+            | LParen => self.nt_actual_parameters(),
+            RParen => Ok(vec![]),
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 AddOp(Add),
