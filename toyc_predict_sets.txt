@@ -1,29 +1,16 @@
 predict sets: {
-    "ReadStatement'": {
+    "ActualParameters": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "ActualParameters'": {
         RParen,
         Comma,
-    },
-    "Definition": {
-        Keyword(
-            Char,
-        ),
-        Keyword(
-            Int,
-        ),
-    },
-    "ReturnStatement": {
-        Keyword(
-            Return,
-        ),
-    },
-    "NewLineStatement": {
-        Keyword(
-            Newline,
-        ),
-    },
-    "Definition'": {
-        LParen,
-        Semicolon,
     },
     "BreakStatement": {
         Keyword(
@@ -33,104 +20,155 @@ predict sets: {
     "CompoundStatement": {
         LCurly,
     },
-    "Term'": {
-        AddOp,
-        Comma,
-        Semicolon,
-        RParen,
-        MulOp,
-        RelOp,
-        AssignOp,
-    },
-    "Primary'": {
-        Comma,
-        LParen,
-        Semicolon,
-        AddOp,
-        RParen,
-        RelOp,
-        AssignOp,
-        MulOp,
-    },
-    "FunctionBody": {
-        LCurly,
-    },
-    "FormalParamList": {
+    "CompoundStatement'": {
+        Keyword(
+            Int,
+        ),
+        Keyword(
+            Read,
+        ),
         Keyword(
             Char,
         ),
         Keyword(
-            Int,
+            While,
         ),
-    },
-    "ExpressionStatement": {
-        Identifier,
-        Number,
-        LParen,
-        Not,
-        CharLiteral,
-        StringLiteral,
-        AddOp,
-    },
-    "FormalParamList'": {
-        Comma,
-        RParen,
-    },
-    "IfStatement'": {
         Keyword(
-            Else,
+            Return,
         ),
-    },
-    "CompoundStatement''": {
-        StringLiteral,
+        Keyword(
+            Break,
+        ),
         Keyword(
             If,
         ),
-        AddOp,
+        Keyword(
+            Newline,
+        ),
         Keyword(
             Write,
         ),
         Identifier,
-        LParen,
         Number,
-        Not,
-        Keyword(
-            Break,
-        ),
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        LCurly,
         RCurly,
+        Semicolon,
+        Not,
+    },
+    "CompoundStatement''": {
         Keyword(
             Read,
         ),
         Keyword(
             While,
         ),
-        Semicolon,
-        CharLiteral,
+        Keyword(
+            Return,
+        ),
+        Keyword(
+            Break,
+        ),
+        Keyword(
+            If,
+        ),
         Keyword(
             Newline,
         ),
         Keyword(
-            Return,
+            Write,
         ),
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        LCurly,
+        RCurly,
+        Semicolon,
+        Not,
+    },
+    "Definition": {
+        Keyword(
+            Int,
+        ),
+        Keyword(
+            Char,
+        ),
+    },
+    "Definition'": {
+        LParen,
+        Semicolon,
+    },
+    "Expression": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "Expression'": {
+        AssignOp,
+        RParen,
+        Comma,
+        Semicolon,
+    },
+    "ExpressionStatement": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "FormalParamList": {
+        Keyword(
+            Int,
+        ),
+        Keyword(
+            Char,
+        ),
+    },
+    "FormalParamList'": {
+        RParen,
+        Comma,
+    },
+    "FunctionBody": {
         LCurly,
     },
+    "FunctionCall": {
+        LParen,
+    },
     "FunctionCall'": {
-        StringLiteral,
         Identifier,
-        CharLiteral,
-        AddOp,
         Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
         RParen,
         Not,
+    },
+    "FunctionDefinition": {
         LParen,
     },
     "FunctionHeader": {
         LParen,
     },
-    "Expression'": {
-        Semicolon,
-        Comma,
-        AssignOp,
+    "FunctionHeader'": {
+        Keyword(
+            Int,
+        ),
+        Keyword(
+            Char,
+        ),
         RParen,
     },
     "IfStatement": {
@@ -138,45 +176,144 @@ predict sets: {
             If,
         ),
     },
-    "ToyCProgram'": {
-        Eof,
+    "IfStatement'": {
         Keyword(
-            Char,
-        ),
-        Keyword(
-            Int,
+            Else,
         ),
     },
-    "SimpleExpression": {
+    "NewLineStatement": {
+        Keyword(
+            Newline,
+        ),
+    },
+    "NullStatement": {
+        Semicolon,
+    },
+    "Primary": {
+        Identifier,
+        Number,
+        CharLiteral,
         StringLiteral,
         AddOp,
         LParen,
-        CharLiteral,
         Not,
-        Number,
-        Identifier,
     },
-    "Term": {
-        StringLiteral,
-        CharLiteral,
-        LParen,
+    "Primary'": {
+        RelOp,
         AddOp,
-        Number,
-        Not,
-        Identifier,
-    },
-    "FunctionDefinition": {
+        MulOp,
+        AssignOp,
         LParen,
+        RParen,
+        Comma,
+        Semicolon,
     },
     "ReadStatement": {
         Keyword(
             Read,
         ),
     },
-    "WhileStatement": {
+    "ReadStatement'": {
+        RParen,
+        Comma,
+    },
+    "RelopExpression": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "RelopExpression'": {
+        RelOp,
+        AssignOp,
+        RParen,
+        Comma,
+        Semicolon,
+    },
+    "ReturnStatement": {
+        Keyword(
+            Return,
+        ),
+    },
+    "ReturnStatement'": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Semicolon,
+        Not,
+    },
+    "SimpleExpression": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "SimpleExpression'": {
+        RelOp,
+        AddOp,
+        AssignOp,
+        RParen,
+        Comma,
+        Semicolon,
+    },
+    "Statement": {
+        Keyword(
+            Read,
+        ),
         Keyword(
             While,
         ),
+        Keyword(
+            Return,
+        ),
+        Keyword(
+            Break,
+        ),
+        Keyword(
+            If,
+        ),
+        Keyword(
+            Newline,
+        ),
+        Keyword(
+            Write,
+        ),
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        LCurly,
+        Semicolon,
+        Not,
+    },
+    "Term": {
+        Identifier,
+        Number,
+        CharLiteral,
+        StringLiteral,
+        AddOp,
+        LParen,
+        Not,
+    },
+    "Term'": {
+        RelOp,
+        AddOp,
+        MulOp,
+        AssignOp,
+        RParen,
+        Comma,
+        Semicolon,
     },
     "ToyCProgram": {
         Keyword(
@@ -187,168 +324,31 @@ predict sets: {
         ),
         Eof,
     },
-    "RelopExpression'": {
-        AssignOp,
-        Comma,
-        RelOp,
-        RParen,
-        Semicolon,
+    "ToyCProgram'": {
+        Keyword(
+            Int,
+        ),
+        Keyword(
+            Char,
+        ),
+        Eof,
     },
     "Type": {
         Keyword(
-            Char,
-        ),
-        Keyword(
-            Int,
-        ),
-    },
-    "Statement": {
-        Keyword(
-            If,
-        ),
-        Keyword(
-            Newline,
-        ),
-        Semicolon,
-        Identifier,
-        AddOp,
-        LCurly,
-        Keyword(
-            Break,
-        ),
-        Not,
-        StringLiteral,
-        Keyword(
-            Read,
-        ),
-        Keyword(
-            While,
-        ),
-        LParen,
-        CharLiteral,
-        Keyword(
-            Write,
-        ),
-        Keyword(
-            Return,
-        ),
-        Number,
-    },
-    "Primary": {
-        Number,
-        CharLiteral,
-        Identifier,
-        LParen,
-        Not,
-        AddOp,
-        StringLiteral,
-    },
-    "Expression": {
-        Not,
-        CharLiteral,
-        Number,
-        AddOp,
-        LParen,
-        Identifier,
-        StringLiteral,
-    },
-    "SimpleExpression'": {
-        Semicolon,
-        AssignOp,
-        RelOp,
-        Comma,
-        AddOp,
-        RParen,
-    },
-    "NullStatement": {
-        Semicolon,
-    },
-    "CompoundStatement'": {
-        Keyword(
-            Read,
-        ),
-        LCurly,
-        Not,
-        Semicolon,
-        Keyword(
-            Newline,
-        ),
-        Keyword(
-            Write,
-        ),
-        Number,
-        Keyword(
-            While,
-        ),
-        Keyword(
-            Break,
-        ),
-        Identifier,
-        Keyword(
-            Char,
-        ),
-        RCurly,
-        AddOp,
-        Keyword(
-            Return,
-        ),
-        CharLiteral,
-        Keyword(
             Int,
         ),
         Keyword(
-            If,
+            Char,
         ),
-        StringLiteral,
-        LParen,
     },
-    "RelopExpression": {
-        AddOp,
-        StringLiteral,
-        CharLiteral,
-        Not,
-        Identifier,
-        Number,
-        LParen,
+    "WhileStatement": {
+        Keyword(
+            While,
+        ),
     },
     "WriteStatement": {
         Keyword(
             Write,
         ),
-    },
-    "ActualParameters": {
-        LParen,
-        Not,
-        CharLiteral,
-        StringLiteral,
-        Identifier,
-        Number,
-        AddOp,
-    },
-    "FunctionHeader'": {
-        RParen,
-        Keyword(
-            Char,
-        ),
-        Keyword(
-            Int,
-        ),
-    },
-    "FunctionCall": {
-        LParen,
-    },
-    "ActualParameters'": {
-        Comma,
-        RParen,
-    },
-    "ReturnStatement'": {
-        AddOp,
-        LParen,
-        StringLiteral,
-        CharLiteral,
-        Number,
-        Semicolon,
-        Not,
-        Identifier,
     },
 }

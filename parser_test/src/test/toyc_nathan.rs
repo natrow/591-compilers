@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use log::debug;
 
@@ -13,7 +13,7 @@ use crate::{
 type ToyCSymbol = Symbol<Token, &'static str>;
 
 /// Keywords in ToyC
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Keyword {
     /// int
     Int,
@@ -74,7 +74,7 @@ impl Keyword {
 }
 
 /// Token classes, with annotations removed (except keywords)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Token {
     /// Keywords
     Keyword(Keyword),
@@ -824,5 +824,11 @@ fn toyc_is_ll1() {
 
     let ll1 = LL1::new(cfg).unwrap();
 
-    println!("predict sets: {:#?}", ll1.get_predict_sets())
+    let predict_sets = ll1.get_predict_sets().clone();
+    let sorted_predict_sets: BTreeMap<&str, BTreeSet<Token>> = predict_sets
+        .into_iter()
+        .map(|(n, t)| (n, t.into_iter().collect()))
+        .collect();
+
+    println!("predict sets: {:#?}", sorted_predict_sets)
 }
