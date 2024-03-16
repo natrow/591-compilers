@@ -1,20 +1,13 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
-use std::{
-    io::{Repeat, Take},
-    mem::take,
-    ops::Mul,
-    str::MatchIndices,
-    thread::sleep,
-};
-
 use crate::{
     file_buffer::Context,
     scanner::{
         token::{
             AddOp::*,
             Keyword::*,
-            MulOp, RelOp,
+            MulOp::*,
+            RelOp::*,
             Token::{self, *},
         },
         Scanner,
@@ -22,7 +15,6 @@ use crate::{
 };
 
 pub mod error;
-use clap::{command, Id};
 use error::Error;
 
 /// Short-hand version of Result<T, E> where E = Context<Error>
@@ -35,7 +27,7 @@ pub struct Parser {
     /// Whether or not to print debug information
     debug: bool,
     /// Whether or not to print verbose information
-    verbose: bool,
+    _verbose: bool,
     /// Look-ahead buffer
     buffer: Token,
 }
@@ -53,41 +45,9 @@ impl Parser {
         Ok(Self {
             scanner,
             debug,
-            verbose,
+            _verbose: verbose,
             buffer: token,
         })
-    }
-
-    /// helper function for Err(self.expected(&[tokens])).
-    /// you can't pass MulOp(_), AddOP(_), RelOp(_) enums to self.expected() variants must be specified.
-    /// This function can take none specify variants and return the token slice reference the self.expects() requires
-    fn expected_variantless(&mut self, given: Vec<Token>) -> Result<()> {
-        let mut result: Vec<Token> = Vec::new();
-        for tok in given {
-            match tok {
-                MulOp(_) => result.append(&mut vec![
-                    MulOp(MulOp::Mul),
-                    MulOp(MulOp::Div),
-                    MulOp(MulOp::Mod),
-                    MulOp(MulOp::BoolAnd),
-                ]),
-
-                AddOp(_) => result.append(&mut vec![AddOp(Add), AddOp(Sub), AddOp(BoolOr)]),
-
-                RelOp(_) => result.append(&mut vec![
-                    RelOp(RelOp::Eq),
-                    RelOp(RelOp::Neq),
-                    RelOp(RelOp::Lt),
-                    RelOp(RelOp::LtEq),
-                    RelOp(RelOp::Gt),
-                    RelOp(RelOp::GtEq),
-                ]),
-
-                _ => result.append(&mut vec![tok]),
-            }
-        }
-
-        Err(self.expected(&result))
     }
 
     /// Parse into an AST, consuming the parser
@@ -316,7 +276,6 @@ impl Parser {
             Keyword(While) => self.nt_while_statement(),
             Keyword(Read) => self.nt_read_statement(),
             Keyword(Write) => self.nt_write_statement(),
-            Keyword(Read) => self.nt_read_statement(),
             Keyword(Newline) => self.nt_newline_statement(),
 
             _ => Err(self.expected(&[
@@ -609,19 +568,13 @@ impl Parser {
     fn nt_write_statement(&mut self) -> Result<()> {
         self.debug("reducing WriteStatement");
 
-        match self.buffer {
-            Keyword(Write) => {
-                self.take(Keyword(Write))?;
-                self.take(LParen)?;
-                self.nt_actual_parameters()?;
-                self.take(RParen)?;
-                self.take(Semicolon)?;
+        self.take(Keyword(Write))?;
+        self.take(LParen)?;
+        self.nt_actual_parameters()?;
+        self.take(RParen)?;
+        self.take(Semicolon)?;
 
-                Ok(())
-            }
-
-            _ => Err(self.expected(&[Keyword(Write)])),
-        }
+        Ok(())
     }
 
     /// <newline> <;>
@@ -704,88 +657,63 @@ impl Parser {
         }
     }
 
-    ///this function does the branching for nt_relop_expression()
-    /// because the self.take() can't take RelOP(_) as an argurment
-    fn relop_expression_helper_fn(&mut self) -> Result<()> {
-        match self.buffer {
-            RelOp(RelOp::Eq) => {
-                self.take(RelOp(RelOp::Eq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(RelOp::Lt) => {
-                self.take(RelOp(RelOp::Lt))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(RelOp::Gt) => {
-                self.take(RelOp(RelOp::Gt))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(RelOp::LtEq) => {
-                self.take(RelOp(RelOp::LtEq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(RelOp::GtEq) => {
-                self.take(RelOp(RelOp::GtEq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            RelOp(RelOp::Neq) => {
-                self.take(RelOp(RelOp::Neq))?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
-                Ok(())
-            }
-
-            _ => Err(self.expected(&[
-                RelOp(RelOp::Eq),
-                RelOp(RelOp::Neq),
-                RelOp(RelOp::Gt),
-                RelOp(RelOp::GtEq),
-                RelOp(RelOp::Lt),
-                RelOp(RelOp::LtEq),
-            ])),
-        }
-    }
-
     ///<relop> SimpleExpression RelopExpression′ | ε
     fn nt_relop_expression_(&mut self) -> Result<()> {
-        /*
-        AssignOp,
-        Comma,
-        RelOp,
-        RParen,
-        Semicolon,
-        */
         self.debug("reducing relop expression'");
 
         match self.buffer {
-            //todo: turn this into function
-            RelOp(_) => self.relop_expression_helper_fn(),
+            RelOp(Eq) => {
+                self.take(RelOp(Eq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(Lt) => {
+                self.take(RelOp(Lt))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(Gt) => {
+                self.take(RelOp(Gt))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(LtEq) => {
+                self.take(RelOp(LtEq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(GtEq) => {
+                self.take(RelOp(GtEq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
+
+            RelOp(Neq) => {
+                self.take(RelOp(Neq))?;
+                self.nt_simple_expression()?;
+                self.nt_relop_expression_()?;
+                Ok(())
+            }
 
             Semicolon | Comma | RParen | AssignOp => Ok(()),
             _ => Err(self.expected(&[
                 AssignOp,
                 RParen,
-                RelOp(RelOp::Gt),
-                RelOp(RelOp::GtEq),
-                RelOp(RelOp::Lt),
-                RelOp(RelOp::LtEq),
-                RelOp(RelOp::Eq),
-                RelOp(RelOp::Neq),
+                RelOp(Gt),
+                RelOp(GtEq),
+                RelOp(Lt),
+                RelOp(LtEq),
+                RelOp(Eq),
+                RelOp(Neq),
                 Comma,
                 Semicolon,
             ])),
@@ -856,12 +784,12 @@ impl Parser {
                 AddOp(BoolOr),
                 Semicolon,
                 AssignOp,
-                RelOp(RelOp::Eq),
-                RelOp(RelOp::Neq),
-                RelOp(RelOp::Gt),
-                RelOp(RelOp::GtEq),
-                RelOp(RelOp::Lt),
-                RelOp(RelOp::LtEq),
+                RelOp(Eq),
+                RelOp(Neq),
+                RelOp(Gt),
+                RelOp(GtEq),
+                RelOp(Lt),
+                RelOp(LtEq),
                 Comma,
                 RParen,
             ])),
@@ -897,40 +825,35 @@ impl Parser {
     /// because the take() can't take MulOP(_) as an argurment
     fn term_p_branching_helper(&mut self) -> Result<()> {
         match self.buffer {
-            MulOp(MulOp::Mul) => {
-                self.take(MulOp(MulOp::Mul))?;
+            MulOp(Mul) => {
+                self.take(MulOp(Mul))?;
                 self.nt_primary()?;
                 self.nt_term_()?;
                 Ok(())
             }
 
-            MulOp(MulOp::Div) => {
-                self.take(MulOp(MulOp::Div))?;
+            MulOp(Div) => {
+                self.take(MulOp(Div))?;
                 self.nt_primary()?;
                 self.nt_term_()?;
                 Ok(())
             }
 
-            MulOp(MulOp::Mod) => {
-                self.take(MulOp(MulOp::Mod))?;
+            MulOp(Mod) => {
+                self.take(MulOp(Mod))?;
                 self.nt_primary()?;
                 self.nt_term_()?;
                 Ok(())
             }
 
-            MulOp(MulOp::BoolAnd) => {
-                self.take(MulOp(MulOp::BoolAnd))?;
+            MulOp(BoolAnd) => {
+                self.take(MulOp(BoolAnd))?;
                 self.nt_primary()?;
                 self.nt_term_()?;
                 Ok(())
             }
 
-            _ => Err(self.expected(&[
-                MulOp(MulOp::BoolAnd),
-                MulOp(MulOp::Div),
-                MulOp(MulOp::Mod),
-                MulOp(MulOp::Mul),
-            ])),
+            _ => Err(self.expected(&[MulOp(BoolAnd), MulOp(Div), MulOp(Mod), MulOp(Mul)])),
         }
     }
 
@@ -944,10 +867,10 @@ impl Parser {
             AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(()),
 
             _ => Err(self.expected(&[
-                MulOp(MulOp::BoolAnd),
-                MulOp(MulOp::Div),
-                MulOp(MulOp::Mod),
-                MulOp(MulOp::Mul),
+                MulOp(BoolAnd),
+                MulOp(Div),
+                MulOp(Mod),
+                MulOp(Mul),
                 AddOp(Sub),
                 AddOp(Add),
                 AddOp(BoolOr),
@@ -955,12 +878,12 @@ impl Parser {
                 Comma,
                 Semicolon,
                 RParen,
-                RelOp(RelOp::Gt),
-                RelOp(RelOp::GtEq),
-                RelOp(RelOp::Lt),
-                RelOp(RelOp::LtEq),
-                RelOp(RelOp::Eq),
-                RelOp(RelOp::Neq),
+                RelOp(Gt),
+                RelOp(GtEq),
+                RelOp(Lt),
+                RelOp(LtEq),
+                RelOp(Eq),
+                RelOp(Neq),
                 AssignOp,
             ])),
         }
@@ -1050,10 +973,10 @@ impl Parser {
             Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => Ok(()),
 
             _ => Err(self.expected(&[
-                MulOp(MulOp::BoolAnd),
-                MulOp(MulOp::Div),
-                MulOp(MulOp::Mod),
-                MulOp(MulOp::Mul),
+                MulOp(BoolAnd),
+                MulOp(Div),
+                MulOp(Mod),
+                MulOp(Mul),
                 AddOp(Sub),
                 AddOp(Add),
                 AddOp(BoolOr),
@@ -1061,12 +984,12 @@ impl Parser {
                 Semicolon,
                 LParen,
                 RParen,
-                RelOp(RelOp::Gt),
-                RelOp(RelOp::GtEq),
-                RelOp(RelOp::Lt),
-                RelOp(RelOp::LtEq),
-                RelOp(RelOp::Eq),
-                RelOp(RelOp::Neq),
+                RelOp(Gt),
+                RelOp(GtEq),
+                RelOp(Lt),
+                RelOp(LtEq),
+                RelOp(Eq),
+                RelOp(Neq),
                 AssignOp,
             ])),
         }
@@ -1127,7 +1050,7 @@ impl Parser {
         self.debug("reducing actualExpression");
 
         match self.buffer {
-            LParen | Not | LParen | CharLiteral(_) | StringLiteral(_) | Identifier(_)
+            LParen | Not | CharLiteral(_) | StringLiteral(_) | Identifier(_)
             | Number(_) | AddOp(Sub) //double check this addOP()
             => {
                 self.nt_expression()?;
