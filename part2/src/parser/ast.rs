@@ -1,9 +1,13 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
+use std::ops::{Mul, Sub};
+
 use crate::scanner::token::{Keyword, Token};
 
 /// Identifiers, which are represented as strings
 pub type Identifier = String;
+
+pub type Number = String;
 /// Variable definitions, which include a list of identifiers and a type
 pub type VarDef = (Vec<Identifier>, Type);
 
@@ -81,6 +85,7 @@ pub enum Expression {
     Not(Box<Expression>),
 }
 
+
 /// All binary operations allowed in the AST
 #[derive(Debug)]
 pub enum Operator {
@@ -110,6 +115,8 @@ pub enum Operator {
     GtEq,
     /// !=
     Neq,
+    /// =
+    Assign
 }
 
 /// Types allowed in the AST

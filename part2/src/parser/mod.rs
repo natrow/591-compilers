@@ -1,20 +1,19 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
+use std::{f32::consts::E, process::ExitCode, slice::SliceIndex};
+
 use crate::{
     file_buffer::Context,
     scanner::{
         token::{
-            AddOp::*,
-            Keyword::*,
-            MulOp::*,
-            RelOp::*,
-            Token::{self, *},
+            self, AddOp::*, Keyword::*, MulOp::*, RelOp::{self, *}, Token::{self, *}
         },
         Scanner,
     },
 };
 
 pub mod error;
+use clap::builder::Str;
 use error::Error;
 
 pub mod ast;
@@ -181,7 +180,7 @@ impl Parser {
     fn nt_function_definition(&mut self, ast_type: Type, ast_id: String) -> Result<Definition> {
         self.debug("reducing FunctionDefinition");
 
-        let var_def = self.nt_function_header()?;
+        let var_def = self.nt_function_header()?; 
         let statement = self.nt_function_body()?;
 
         Ok(Definition::Func(ast_id, ast_type, var_def, statement))
@@ -352,7 +351,7 @@ impl Parser {
             | RCurly
             | Not
             | Semicolon
-            | LParen => todo!(),
+            | LParen => Ok(()),
             _ => Err(self.expected(&[
                 Keyword(Int),
                 Keyword(Char),
@@ -396,7 +395,7 @@ impl Parser {
                 statements.push(statement);
                 self.nt_compound_statement__(statements)
             }
-            RCurly => todo!(),
+            RCurly => Ok(()),
             _ => Err(self.expected(&[
                 Keyword(Read),
                 Keyword(Newline),
@@ -602,10 +601,9 @@ impl Parser {
         match self.buffer {
             Not | CharLiteral(_) | Number(_) | AddOp(_) | LParen | Identifier(_)
             | StringLiteral(_) => {
-                self.nt_relop_expression()?;
-                self.nt_expression_()?;
-
-                todo!()
+                
+                let lhs = self.nt_relop_expression()?;
+                self.nt_expression_(lhs)
             }
             _ => Err(self.expected(&[
                 LParen,
@@ -623,33 +621,33 @@ impl Parser {
     }
 
     /// <assignop> RelopExpression Expression' | ε
-    fn nt_expression_(&mut self) -> Result<()> {
+    fn nt_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("reducing Expression'");
 
         match self.buffer {
             AssignOp => {
                 self.take(AssignOp)?;
-                self.nt_relop_expression()?;
-                self.nt_expression_()?;
-
-                todo!()
-            }
-            Semicolon | RParen | Comma => todo!(),
+                let rhs = self.nt_relop_expression()?;
+                let exp = Expression::Expr(Operator::Assign, Box::new(lhs), Box::new(rhs));
+                self.nt_expression_(exp)
+            },
+            Semicolon | RParen | Comma => Ok(lhs),
             _ => Err(self.expected(&[Semicolon, Comma, AssignOp, RParen])),
         }
     }
 
     /// SimpleExpression RelopExpression'
-    fn nt_relop_expression(&mut self) -> Result<()> {
+    fn nt_relop_expression(&mut self) -> Result<Expression> {
         self.debug("reducing RelopExpression");
 
         match self.buffer {
             AddOp(_) | StringLiteral(_) | CharLiteral(_) | Not | Identifier(_) | Number(_)
             | LParen => {
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
+                // self.nt_simple_expression()?;
+                // self.nt_relop_expression_()?;
 
-                todo!()
+                let lhs = self.nt_simple_expression()?;
+                self.nt_relop_expression_(lhs)
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -666,18 +664,33 @@ impl Parser {
     }
 
     ///<relop> SimpleExpression RelopExpression' | ε
-    fn nt_relop_expression_(&mut self) -> Result<()> {
+    fn nt_relop_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("reducing RelopExpression'");
 
         match self.buffer {
             RelOp(_) => {
-                self.load_next_token()?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
+                // self.load_next_token()?;
+                // self.nt_simple_expression()?;
+                // self.nt_relop_expression_()?;
+                
 
-                todo!()
+                let op;
+                match self.buffer {
+                    RelOp(Eq) => {op = Operator::Eq;}
+                    RelOp(Neq) => {op = Operator::Neq;}
+                    RelOp(Lt) => {op = Operator::Lt;}
+                    RelOp(LtEq) => {op =Operator::LtEq;}
+                    RelOp(Gt) => {op = Operator::Gt}
+                    RelOp(GtEq) => {op =Operator::GtEq;}
+                    _ => {panic!("Failed to match Operators to Relops in relop_expressions")}
+                }
+
+                self.load_next_token()?;
+                let rhs = self.nt_simple_expression()?;
+                let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
+                Ok(exp)
             }
-            Semicolon | Comma | RParen | AssignOp => todo!(),
+            Semicolon | Comma | RParen | AssignOp => Ok(lhs),
             _ => Err(self.expected(&[
                 AssignOp,
                 RParen,
@@ -694,16 +707,17 @@ impl Parser {
     }
 
     /// Term SimpleExpression'
-    fn nt_simple_expression(&mut self) -> Result<()> {
+    fn nt_simple_expression(&mut self) -> Result<Expression> {
         self.debug("reducing SimpleExpression");
 
         match self.buffer {
             StringLiteral(_) | AddOp(_) | CharLiteral(_) | Number(_) | Identifier(_) | LParen
             | Not => {
-                self.nt_term()?;
-                self.nt_simple_expression_()?;
+                // self.nt_term()?;
+                // self.nt_simple_expression_()?;
 
-                todo!()
+                let rhs = self.nt_term()?;
+                self.nt_simple_expression_(rhs)
             }
             _ => Err(self.expected(&[
                 StringLiteral(String::new()),
@@ -720,18 +734,26 @@ impl Parser {
     }
 
     /// <addop> Term SimpleExpression' | ε
-    fn nt_simple_expression_(&mut self) -> Result<()> {
+    fn nt_simple_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("reducing SimpleExpression'");
 
         match self.buffer {
             AddOp(_) => {
-                self.load_next_token()?;
-                self.nt_simple_expression()?;
-                self.nt_relop_expression_()?;
+                let op;
+                match self.buffer {
+                    AddOp(Add) => {op = Operator::Add;}
+                    AddOp(Sub) => {op = Operator::Sub;}
+                    AddOp(BoolOr) => {op = Operator::Sub;}
 
-                todo!()
+                    _ => {panic!("Failed to match Operators to AddOps in nt_simple_expression_")}
+                }
+
+                self.load_next_token()?;
+                let rhs = self.nt_term()?;
+                let epr = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
+                self.nt_relop_expression_(epr)
             }
-            Semicolon | AssignOp | RelOp(_) | Comma | RParen => todo!(),
+            Semicolon | AssignOp | RelOp(_) | Comma | RParen => Ok(lhs),
             _ => Err(self.expected(&[
                 AddOp(Sub),
                 AddOp(Add),
@@ -751,16 +773,17 @@ impl Parser {
     }
 
     /// Primary Term'
-    fn nt_term(&mut self) -> Result<()> {
+    fn nt_term(&mut self) -> Result<Expression> {
         self.debug("reducing Term");
 
         match self.buffer {
             StringLiteral(_) | CharLiteral(_) | LParen | AddOp(_) | Number(_) | Not
             | Identifier(_) => {
-                self.nt_primary()?;
-                self.nt_term_()?;
+                // self.nt_primary()?;
+                // self.nt_term_()?;
 
-                todo!()
+                let lhs = self.nt_primary()?;
+                self.nt_term_(lhs)
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -776,18 +799,29 @@ impl Parser {
     }
 
     /// <mulop> Primary Term' | ε
-    fn nt_term_(&mut self) -> Result<()> {
+    fn nt_term_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("reducing Term'");
 
         match self.buffer {
             MulOp(_) => {
-                self.load_next_token()?;
-                self.nt_primary()?;
-                self.nt_term_()?;
+                // self.load_next_token()?;
+                // self.nt_primary()?;
+                // self.nt_term_()?;
+                
+                let op;
+                match self.buffer {
+                    MulOp(Mul) => {op = Operator::Mul;}
+                    MulOp(Mod) => {op = Operator::Mod;}
+                    MulOp(Div) => {op = Operator::Div;}
 
-                todo!()
+                    _ => {panic!("Failed to match Operators to AddOps in nt_simple_expression_")}
+                }
+                self.load_next_token()?;
+                let rhs = self.nt_primary()?;
+                let epr = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
+                self.nt_term_(epr)
             }
-            AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => todo!(),
+            AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(lhs),
             _ => Err(self.expected(&[
                 MulOp(BoolAnd),
                 MulOp(Div),
@@ -818,49 +852,65 @@ impl Parser {
     /// | <(> Expression <)>
     /// | <-> Primary
     /// | <Not> Primary
-    fn nt_primary(&mut self) -> Result<()> {
+    fn nt_primary(&mut self) -> Result<Expression> {
         self.debug("reducing Primary");
-
+        
         match self.buffer {
             Identifier(_) => {
-                self.take(Identifier(String::new()))?;
-                self.nt_primary_()?;
+                // self.take(Identifier(String::new()))?;
+                // self.nt_primary_()?;
 
-                todo!();
+                let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
+                match self.nt_primary_()? {
+                    Some(_) => Ok(Expression::FuncCall(ast_id, self.nt_primary_()?.unwrap())),
+                    _ => Ok(Expression::Identifier(ast_id))
+                }
+                
             }
             Number(_) => {
-                self.take(Number(String::new()))?;
+                // self.take(Number(String::new()))?;
 
-                todo!()
+                if let Number(ast_num) = self.take(Number(String::new()))? {
+                    Ok(Expression::Number(ast_num))
+                } else {
+                    Err(self.expected(&[Number(String::new())]))
+                }
             }
             StringLiteral(_) => {
-                self.take(StringLiteral(String::new()))?;
+                // self.take(StringLiteral(String::new()))?;
 
-                todo!()
+                if let StringLiteral(ast_str) = self.take(StringLiteral(String::new()))? {
+                    Ok(Expression::StringLiteral(ast_str))
+                } else {
+                    Err(self.expected(&[StringLiteral(String::new())]))
+                }
             }
             CharLiteral(_) => {
-                self.take(CharLiteral(None))?;
-
-                todo!()
+                //self.take(CharLiteral(None))?;
+                if let CharLiteral(ast_char) = self.take(CharLiteral(None))? {
+                    Ok(Expression::CharLiteral(ast_char))
+                } else {
+                    Err(self.expected(&[CharLiteral(None)]))
+                }
             }
             LParen => {
                 self.take(LParen)?;
-                self.nt_expression()?;
+                let expr = self.nt_expression();
                 self.take(RParen)?;
 
-                todo!()
+                expr
             }
             AddOp(Sub) => {
                 self.take(AddOp(Sub))?;
-                self.nt_primary()?;
-
-                todo!()
+                let rhs = self.nt_primary()?;
+                let lhs = Expression::Number(String::from("0"));
+                let expr = Expression::Expr(Operator::Sub, Box::new(lhs), Box::new(rhs));
+                Ok(Expression::Minus(Box::new(expr)))
             }
             Not => {
                 self.take(Not)?;
-                self.nt_primary()?;
-
-                todo!()
+                Ok(Expression::Not(Box::new(self.nt_primary()?)))
+                
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
