@@ -1,19 +1,20 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
-use std::{f32::consts::E, process::ExitCode, slice::SliceIndex};
-
 use crate::{
     file_buffer::Context,
     scanner::{
         token::{
-            self, AddOp::*, Keyword::*, MulOp::*, RelOp::{self, *}, Token::{self, *}
+            AddOp::*,
+            Keyword::*,
+            MulOp::*,
+            RelOp::*,
+            Token::{self, *},
         },
         Scanner,
     },
 };
 
 pub mod error;
-use clap::builder::Str;
 use error::Error;
 
 pub mod ast;
@@ -144,19 +145,19 @@ impl Parser {
 
         let ast_type = self.nt_type()?;
 
-        let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
-        self.nt_definition_(ast_type, ast_id)
+        let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        self.nt_definition_(ast_type, id)
     }
 
     /// FunctionDefinition | <;>
-    fn nt_definition_(&mut self, ast_type: Type, ast_id: String) -> Result<Definition> {
+    fn nt_definition_(&mut self, ast_type: Type, id: String) -> Result<Definition> {
         self.debug("reducing Definition'");
 
         match self.buffer {
-            LParen => self.nt_function_definition(ast_type, ast_id),
+            LParen => self.nt_function_definition(ast_type, id),
             Semicolon => {
                 self.load_next_token()?;
-                Ok(Definition::Var(vec![ast_id], ast_type))
+                Ok(Definition::Var(vec![id], ast_type))
             }
             _ => Err(self.expected(&[LParen, Semicolon])),
         }
@@ -177,13 +178,13 @@ impl Parser {
     }
 
     /// FunctionHeader FunctionBody
-    fn nt_function_definition(&mut self, ast_type: Type, ast_id: String) -> Result<Definition> {
+    fn nt_function_definition(&mut self, ast_type: Type, id: String) -> Result<Definition> {
         self.debug("reducing FunctionDefinition");
 
-        let var_def = self.nt_function_header()?; 
+        let var_def = self.nt_function_header()?;
         let statement = self.nt_function_body()?;
 
-        Ok(Definition::Func(ast_id, ast_type, var_def, statement))
+        Ok(Definition::Func(id, ast_type, var_def, statement))
     }
 
     /// <(> FunctionHeader' <)>
@@ -220,8 +221,8 @@ impl Parser {
         self.debug("reducing FormalParamList");
 
         let ast_type = self.nt_type()?;
-        let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
-        let mut var_def = vec![(vec![ast_id], ast_type)];
+        let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        let mut var_def = vec![(vec![id], ast_type)];
         self.nt_formal_param_list_(&mut var_def)?;
 
         Ok(var_def)
@@ -235,8 +236,8 @@ impl Parser {
             Comma => {
                 self.take(Comma)?;
                 let ast_type = self.nt_type()?;
-                let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
-                var_def.push((vec![ast_id], ast_type));
+                let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+                var_def.push((vec![id], ast_type));
                 self.nt_formal_param_list_(var_def)
             }
             RParen => Ok(()),
@@ -332,12 +333,12 @@ impl Parser {
         match self.buffer {
             Keyword(Int | Char) => {
                 let ast_type = self.nt_type()?;
-                let ast_id = self
+                let id = self
                     .take(Identifier(String::new()))?
                     .clone()
                     .try_into()
                     .unwrap();
-                var_def.push((vec![ast_id], ast_type));
+                var_def.push((vec![id], ast_type));
                 self.take(Semicolon)?;
                 self.nt_compound_statement_(var_def)
             }
@@ -504,6 +505,7 @@ impl Parser {
             AddOp(Sub) | LParen | StringLiteral(_) | CharLiteral(_) | Number(_) | Not
             | Identifier(_) => {
                 let expression = self.nt_expression()?;
+
                 Ok(Some(expression))
             }
             Semicolon => Ok(None),
@@ -538,12 +540,12 @@ impl Parser {
 
         self.take(Keyword(Read))?;
         self.take(LParen)?;
-        let ast_id = self
+        let id = self
             .take(Identifier(String::new()))?
             .clone()
             .try_into()
             .unwrap();
-        let mut ids = vec![ast_id];
+        let mut ids = vec![id];
         self.nt_read_statement_(&mut ids)?;
         self.take(RParen)?;
         self.take(Semicolon)?;
@@ -558,12 +560,12 @@ impl Parser {
         match self.buffer {
             Comma => {
                 self.take(Comma)?;
-                let ast_id = self
+                let id = self
                     .take(Identifier(String::new()))?
                     .clone()
                     .try_into()
                     .unwrap();
-                ids.push(ast_id);
+                ids.push(id);
                 self.nt_read_statement_(ids)
             }
             RParen => Ok(()),
@@ -601,7 +603,6 @@ impl Parser {
         match self.buffer {
             Not | CharLiteral(_) | Number(_) | AddOp(_) | LParen | Identifier(_)
             | StringLiteral(_) => {
-                
                 let lhs = self.nt_relop_expression()?;
                 self.nt_expression_(lhs)
             }
@@ -630,7 +631,7 @@ impl Parser {
                 let rhs = self.nt_relop_expression()?;
                 let exp = Expression::Expr(Operator::Assign, Box::new(lhs), Box::new(rhs));
                 self.nt_expression_(exp)
-            },
+            }
             Semicolon | RParen | Comma => Ok(lhs),
             _ => Err(self.expected(&[Semicolon, Comma, AssignOp, RParen])),
         }
@@ -643,9 +644,6 @@ impl Parser {
         match self.buffer {
             AddOp(_) | StringLiteral(_) | CharLiteral(_) | Not | Identifier(_) | Number(_)
             | LParen => {
-                // self.nt_simple_expression()?;
-                // self.nt_relop_expression_()?;
-
                 let lhs = self.nt_simple_expression()?;
                 self.nt_relop_expression_(lhs)
             }
@@ -669,26 +667,11 @@ impl Parser {
 
         match self.buffer {
             RelOp(_) => {
-                // self.load_next_token()?;
-                // self.nt_simple_expression()?;
-                // self.nt_relop_expression_()?;
-                
-
-                let op;
-                match self.buffer {
-                    RelOp(Eq) => {op = Operator::Eq;}
-                    RelOp(Neq) => {op = Operator::Neq;}
-                    RelOp(Lt) => {op = Operator::Lt;}
-                    RelOp(LtEq) => {op =Operator::LtEq;}
-                    RelOp(Gt) => {op = Operator::Gt}
-                    RelOp(GtEq) => {op =Operator::GtEq;}
-                    _ => {panic!("Failed to match Operators to Relops in relop_expressions")}
-                }
-
+                let op = self.buffer.clone().try_into().unwrap();
                 self.load_next_token()?;
                 let rhs = self.nt_simple_expression()?;
                 let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
-                Ok(exp)
+                self.nt_relop_expression_(exp)
             }
             Semicolon | Comma | RParen | AssignOp => Ok(lhs),
             _ => Err(self.expected(&[
@@ -713,11 +696,8 @@ impl Parser {
         match self.buffer {
             StringLiteral(_) | AddOp(_) | CharLiteral(_) | Number(_) | Identifier(_) | LParen
             | Not => {
-                // self.nt_term()?;
-                // self.nt_simple_expression_()?;
-
-                let rhs = self.nt_term()?;
-                self.nt_simple_expression_(rhs)
+                let lhs = self.nt_term()?;
+                self.nt_simple_expression_(lhs)
             }
             _ => Err(self.expected(&[
                 StringLiteral(String::new()),
@@ -739,19 +719,11 @@ impl Parser {
 
         match self.buffer {
             AddOp(_) => {
-                let op;
-                match self.buffer {
-                    AddOp(Add) => {op = Operator::Add;}
-                    AddOp(Sub) => {op = Operator::Sub;}
-                    AddOp(BoolOr) => {op = Operator::Sub;}
-
-                    _ => {panic!("Failed to match Operators to AddOps in nt_simple_expression_")}
-                }
-
+                let op = self.buffer.clone().try_into().unwrap();
                 self.load_next_token()?;
                 let rhs = self.nt_term()?;
-                let epr = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
-                self.nt_relop_expression_(epr)
+                let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
+                self.nt_relop_expression_(exp)
             }
             Semicolon | AssignOp | RelOp(_) | Comma | RParen => Ok(lhs),
             _ => Err(self.expected(&[
@@ -779,9 +751,6 @@ impl Parser {
         match self.buffer {
             StringLiteral(_) | CharLiteral(_) | LParen | AddOp(_) | Number(_) | Not
             | Identifier(_) => {
-                // self.nt_primary()?;
-                // self.nt_term_()?;
-
                 let lhs = self.nt_primary()?;
                 self.nt_term_(lhs)
             }
@@ -804,22 +773,11 @@ impl Parser {
 
         match self.buffer {
             MulOp(_) => {
-                // self.load_next_token()?;
-                // self.nt_primary()?;
-                // self.nt_term_()?;
-                
-                let op;
-                match self.buffer {
-                    MulOp(Mul) => {op = Operator::Mul;}
-                    MulOp(Mod) => {op = Operator::Mod;}
-                    MulOp(Div) => {op = Operator::Div;}
-
-                    _ => {panic!("Failed to match Operators to AddOps in nt_simple_expression_")}
-                }
+                let op = self.buffer.clone().try_into().unwrap();
                 self.load_next_token()?;
                 let rhs = self.nt_primary()?;
-                let epr = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
-                self.nt_term_(epr)
+                let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
+                self.nt_term_(exp)
             }
             AddOp(_) | Comma | Semicolon | RParen | RelOp(_) | AssignOp => Ok(lhs),
             _ => Err(self.expected(&[
@@ -854,63 +812,36 @@ impl Parser {
     /// | <Not> Primary
     fn nt_primary(&mut self) -> Result<Expression> {
         self.debug("reducing Primary");
-        
-        match self.buffer {
+
+        match &self.buffer {
             Identifier(_) => {
-                // self.take(Identifier(String::new()))?;
-                // self.nt_primary_()?;
-
-                let ast_id = self.take(Identifier(String::new()))?.try_into().unwrap();
-                match self.nt_primary_()? {
-                    Some(_) => Ok(Expression::FuncCall(ast_id, self.nt_primary_()?.unwrap())),
-                    _ => Ok(Expression::Identifier(ast_id))
-                }
-                
+                let id = self.buffer.clone().try_into().unwrap();
+                self.load_next_token()?;
+                self.nt_primary_(id)
             }
-            Number(_) => {
-                // self.take(Number(String::new()))?;
+            Number(_) | StringLiteral(_) | CharLiteral(_) => {
+                let exp = self.buffer.clone().try_into().unwrap();
+                self.load_next_token()?;
 
-                if let Number(ast_num) = self.take(Number(String::new()))? {
-                    Ok(Expression::Number(ast_num))
-                } else {
-                    Err(self.expected(&[Number(String::new())]))
-                }
-            }
-            StringLiteral(_) => {
-                // self.take(StringLiteral(String::new()))?;
-
-                if let StringLiteral(ast_str) = self.take(StringLiteral(String::new()))? {
-                    Ok(Expression::StringLiteral(ast_str))
-                } else {
-                    Err(self.expected(&[StringLiteral(String::new())]))
-                }
-            }
-            CharLiteral(_) => {
-                //self.take(CharLiteral(None))?;
-                if let CharLiteral(ast_char) = self.take(CharLiteral(None))? {
-                    Ok(Expression::CharLiteral(ast_char))
-                } else {
-                    Err(self.expected(&[CharLiteral(None)]))
-                }
+                Ok(exp)
             }
             LParen => {
                 self.take(LParen)?;
-                let expr = self.nt_expression();
+                let exp = self.nt_expression()?;
                 self.take(RParen)?;
 
-                expr
+                Ok(exp)
             }
             AddOp(Sub) => {
                 self.take(AddOp(Sub))?;
-                let rhs = self.nt_primary()?;
-                let lhs = Expression::Number(String::from("0"));
-                let expr = Expression::Expr(Operator::Sub, Box::new(lhs), Box::new(rhs));
-                Ok(Expression::Minus(Box::new(expr)))
+                let exp = self.nt_primary()?;
+
+                Ok(Expression::Minus(Box::new(exp)))
             }
             Not => {
                 self.take(Not)?;
+
                 Ok(Expression::Not(Box::new(self.nt_primary()?)))
-                
             }
             _ => Err(self.expected(&[
                 AddOp(Sub),
@@ -925,12 +856,18 @@ impl Parser {
     }
 
     /// FunctionCall | ε
-    fn nt_primary_(&mut self) -> Result<Option<Vec<Expression>>> {
+    fn nt_primary_(&mut self, id: String) -> Result<Expression> {
         self.debug("reducing Primary'");
 
         match self.buffer {
-            LParen => Ok(Some(self.nt_function_call()?)),
-            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => Ok(None),
+            LParen => {
+                let args = self.nt_function_call()?;
+
+                Ok(Expression::FuncCall(id, args))
+            }
+            Comma | Semicolon | AddOp(_) | RParen | AssignOp | MulOp(_) | RelOp(_) => {
+                Ok(Expression::Identifier(id))
+            }
             _ => Err(self.expected(&[
                 MulOp(BoolAnd),
                 MulOp(Div),

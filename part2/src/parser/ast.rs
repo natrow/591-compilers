@@ -1,13 +1,10 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
-use std::ops::{Mul, Sub};
-
-use crate::scanner::token::{Keyword, Token};
+use crate::scanner::token::{AddOp, Keyword, MulOp, RelOp, Token};
 
 /// Identifiers, which are represented as strings
 pub type Identifier = String;
 
-pub type Number = String;
 /// Variable definitions, which include a list of identifiers and a type
 pub type VarDef = (Vec<Identifier>, Type);
 
@@ -85,6 +82,18 @@ pub enum Expression {
     Not(Box<Expression>),
 }
 
+impl TryFrom<Token> for Expression {
+    type Error = ();
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::Number(x) => Ok(Expression::Number(x)),
+            Token::CharLiteral(x) => Ok(Expression::CharLiteral(x)),
+            Token::StringLiteral(x) => Ok(Expression::StringLiteral(x)),
+            _ => Err(()),
+        }
+    }
+}
 
 /// All binary operations allowed in the AST
 #[derive(Debug)]
@@ -116,7 +125,55 @@ pub enum Operator {
     /// !=
     Neq,
     /// =
-    Assign
+    Assign,
+}
+
+impl From<AddOp> for Operator {
+    fn from(value: AddOp) -> Self {
+        match value {
+            AddOp::Add => Operator::Add,
+            AddOp::BoolOr => Operator::BoolOr,
+            AddOp::Sub => Operator::Sub,
+        }
+    }
+}
+
+impl From<MulOp> for Operator {
+    fn from(value: MulOp) -> Self {
+        match value {
+            MulOp::Mul => Operator::Mul,
+            MulOp::Div => Operator::Div,
+            MulOp::Mod => Operator::Mod,
+            MulOp::BoolAnd => Operator::BoolAnd,
+        }
+    }
+}
+
+impl From<RelOp> for Operator {
+    fn from(value: RelOp) -> Self {
+        match value {
+            RelOp::Eq => Operator::Eq,
+            RelOp::Neq => Operator::Neq,
+            RelOp::Lt => Operator::Lt,
+            RelOp::LtEq => Operator::LtEq,
+            RelOp::GtEq => Operator::GtEq,
+            RelOp::Gt => Operator::Gt,
+        }
+    }
+}
+
+impl TryFrom<Token> for Operator {
+    type Error = ();
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::AddOp(x) => Ok(x.into()),
+            Token::MulOp(x) => Ok(x.into()),
+            Token::RelOp(x) => Ok(x.into()),
+            Token::AssignOp => Ok(Operator::Assign),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Types allowed in the AST
