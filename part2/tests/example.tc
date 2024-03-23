@@ -13,7 +13,7 @@ int main() {
         if ( isEven(i) )
             write(" is even");
         else
-            write(" is odd);
+            write(" is odd");
         newline;
         i = i + 1;
     }

@@ -19,7 +19,7 @@ pub mod parser;
 pub mod scanner;
 
 use file_buffer::MaybeContext;
-use parser::{error::Error as ParserError, Parser};
+use parser::{ast::Program, error::Error as ParserError, Parser};
 use scanner::Scanner;
 
 /// Command line arguments accepted by the scanner
@@ -33,6 +33,9 @@ struct Args {
     /// Display all information
     #[arg(short, long)]
     verbose: bool,
+    /// Display the abstract syntax tree
+    #[arg(short, long)]
+    abstract_: bool,
     /// toyc source files
     input_files: Vec<PathBuf>,
 }
@@ -74,13 +77,21 @@ fn main() -> ExitCode {
 
             let parser = Parser::new(scanner, debug_parser, verbose)?;
 
-            parser.parse()?;
+            let ast = parser.parse()?;
 
-            Ok::<_, MaybeContext<ParserError>>(())
+            Ok::<Program, MaybeContext<ParserError>>(ast)
         };
 
-        if let Err(e) = try_catch() {
-            eprintln!("{} {}", "[ERROR]".red(), e);
+        match try_catch() {
+            Ok(ast) => {
+                if args.abstract_ {
+                    // todo: implement display
+                    println!("{:#?}", ast)
+                }
+            }
+            Err(e) => {
+                eprintln!("{} {}", "[ERROR]".red(), e);
+            }
         }
     }
 
