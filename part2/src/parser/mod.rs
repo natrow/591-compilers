@@ -1,7 +1,7 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
 
 use crate::{
-    file_buffer::Context,
+    context::Context,
     scanner::{
         token::{
             AddOp::*,
@@ -82,7 +82,7 @@ impl Parser {
             self.load_next_token()?;
             Ok(token)
         } else {
-            Err(self.error(vec![expected.to_str()]))
+            Err(self.error(vec![expected]))
         }
     }
 
@@ -92,7 +92,7 @@ impl Parser {
     }
 
     /// Creates a syntax error
-    fn error(&self, expected: Vec<&'static str>) -> Context<Error> {
+    fn error(&self, expected: Vec<Token>) -> Context<Error> {
         self.context(Error::SyntaxError {
             got: self.buffer.clone(),
             expected,
@@ -101,7 +101,7 @@ impl Parser {
 
     /// Creates a syntax error for a specific token
     fn expected(&self, expected: &[Token]) -> Context<Error> {
-        self.error(expected.iter().map(Token::to_str).collect())
+        self.error(expected.to_owned())
     }
 
     /// Prints debug messages

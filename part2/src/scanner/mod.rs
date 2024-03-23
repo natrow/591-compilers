@@ -4,7 +4,7 @@ use std::{fmt::Display, path::Path};
 
 use colored::Colorize;
 
-use crate::file_buffer::*;
+use crate::{context::Context, file_buffer::FileBuffer};
 
 pub mod error;
 mod fsm;

@@ -14,11 +14,12 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Parser as ClapParser, ValueEnum};
 use colored::Colorize;
 
+pub mod context;
 pub mod file_buffer;
 pub mod parser;
 pub mod scanner;
 
-use file_buffer::MaybeContext;
+use context::MaybeContext;
 use parser::{ast::Program, error::Error as ParserError, Parser};
 use scanner::Scanner;
 

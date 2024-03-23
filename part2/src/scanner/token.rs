@@ -287,6 +287,8 @@ impl Token {
     }
 
     /// Convert the token into string literal (static allocation)
+    ///
+    /// Note: this is only used for parser errors (aka syntax errors)
     pub const fn to_str(&self) -> &'static str {
         match self {
             Self::Keyword(k) => k.to_str(),
@@ -295,35 +297,35 @@ impl Token {
             Self::CharLiteral(_) => "<char literal>",
             Self::StringLiteral(_) => "<string literal>",
             Self::RelOp(op) => match op {
-                RelOp::Eq => "==",
-                RelOp::Gt => ">",
-                RelOp::GtEq => ">=",
-                RelOp::Lt => "<",
-                RelOp::LtEq => "<=",
-                RelOp::Neq => "!=",
+                RelOp::Eq => "'=='",
+                RelOp::Gt => "'>'",
+                RelOp::GtEq => "'>='",
+                RelOp::Lt => "'<'",
+                RelOp::LtEq => "'<='",
+                RelOp::Neq => "'!='",
             },
             Self::AddOp(op) => match op {
-                AddOp::Add => "+",
-                AddOp::Sub => "-",
-                AddOp::BoolOr => "||",
+                AddOp::Add => "'+'",
+                AddOp::Sub => "'-'",
+                AddOp::BoolOr => "'||'",
             },
             Self::MulOp(op) => match op {
-                MulOp::BoolAnd => "&&",
-                MulOp::Div => "/",
-                MulOp::Mod => "%",
-                MulOp::Mul => "*",
+                MulOp::BoolAnd => "'&&'",
+                MulOp::Div => "'/'",
+                MulOp::Mod => "'%'",
+                MulOp::Mul => "'*'",
             },
-            Self::AssignOp => "=",
-            Self::LParen => "(",
-            Self::RParen => ")",
-            Self::LCurly => "{",
-            Self::RCurly => "}",
-            Self::LBracket => "[",
-            Self::RBracket => "]",
+            Self::AssignOp => "'='",
+            Self::LParen => "'('",
+            Self::RParen => "')'",
+            Self::LCurly => "'{'",
+            Self::RCurly => "'}'",
+            Self::LBracket => "'['",
+            Self::RBracket => "']'",
             Self::Comma => "','",
-            Self::Semicolon => ";",
-            Self::Not => "!",
-            Self::Colon => ":",
+            Self::Semicolon => "';'",
+            Self::Not => "'!'",
+            Self::Colon => "':'",
             Self::Eof => "<EOF>",
         }
     }
@@ -339,7 +341,7 @@ impl Display for Token {
                 "CHARLITERAL",
                 c.map(|c| c.to_string()).unwrap_or(String::new()),
             ),
-            Token::StringLiteral(s) => ("STRING", s.clone()),
+            Token::StringLiteral(s) => ("STRING", String::from("\"") + s + "\""),
             Token::RelOp(k) => ("RELOP", k.to_string()),
             Token::AddOp(k) => ("ADDOP", k.to_string()),
             Token::MulOp(k) => ("MULOP", k.to_string()),
@@ -356,6 +358,6 @@ impl Display for Token {
             Token::Colon => ("COLON", ":".to_owned()),
             Token::Eof => ("EOF", "EOF".to_owned()),
         };
-        write!(f, "(<{}>, \"{}\")", class, attribute)
+        write!(f, "token {} {}", class, attribute)
     }
 }

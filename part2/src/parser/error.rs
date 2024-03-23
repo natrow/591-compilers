@@ -3,16 +3,17 @@
 use std::fmt::Display;
 
 use crate::{
-    file_buffer::Context,
+    context::Context,
     scanner::{error::Error as ScannerError, token::Token},
 };
 
 /// Create a comma separated list of `T::to_string()`
-fn list_to_string<T: Display>(list: &[T]) -> String {
+fn list_to_string<I: IntoIterator<Item = T>, T: Display>(list: I) -> String {
     let mut s = String::new();
-    for (i, e) in list.iter().enumerate() {
+    let mut iter = list.into_iter().peekable();
+    while let Some(e) = iter.next() {
         s += &e.to_string();
-        if i < list.len() - 1 {
+        if iter.peek().is_some() {
             s += ", ";
         }
     }
@@ -27,7 +28,7 @@ pub enum Error {
         /// The token that was actually scanned
         got: Token,
         /// The token which was expected
-        expected: Vec<&'static str>,
+        expected: Vec<Token>,
     },
     /// An error returned from the scanner
     ScannerError(ScannerError),
@@ -38,10 +39,10 @@ impl Display for Error {
         let str = match self {
             Self::SyntaxError { got, expected } => {
                 format!(
-                    "got: {}, expected{}: {}",
-                    got,
+                    "invalid syntax, got: {}, expected{}: {}",
+                    got.to_str(),
                     if expected.len() == 1 { "" } else { " one of" },
-                    list_to_string(expected)
+                    list_to_string(expected.iter().map(|e| e.to_str()))
                 )
             }
             Self::ScannerError(e) => e.to_string(),
