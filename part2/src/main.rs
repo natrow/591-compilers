@@ -86,8 +86,7 @@ fn main() -> ExitCode {
         match try_catch() {
             Ok(ast) => {
                 if args.abstract_ {
-                    // todo: implement display
-                    println!("{:#?}", ast)
+                    println!("<< Abstract Syntax >>\n{}", ast)
                 }
             }
             Err(e) => {

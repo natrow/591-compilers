@@ -2,6 +2,8 @@
 
 use crate::scanner::token::{AddOp, Keyword, MulOp, RelOp, Token};
 
+mod printing;
+
 /// Identifiers, which are represented as strings
 pub type Identifier = String;
 
