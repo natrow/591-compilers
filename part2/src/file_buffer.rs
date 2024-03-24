@@ -1,4 +1,7 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of a line-by-line file buffer.
+//! Includes support for contextual errors and precise cursor control.
 
 use std::{
     fmt::Display,

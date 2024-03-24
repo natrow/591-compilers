@@ -1,4 +1,6 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of the Abstract Syntax Tree, which is created by the scanner.
 
 use crate::scanner::token::{AddOp, Keyword, MulOp, RelOp, Token};
 

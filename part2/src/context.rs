@@ -1,4 +1,7 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Contextual errors. Created using [crate::file_buffer::FileBuffer].
+//! [MaybeContext] allows mixing these errors with others.
 
 use std::fmt::Display;
 

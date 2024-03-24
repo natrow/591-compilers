@@ -1,4 +1,9 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of the parser. This is implemented as
+//! a struct that is consumed during parsing, which conveniently
+//! groups the state variables while preventing the state from being
+//! corrupted.
 
 use crate::{
     context::Context,
@@ -20,10 +25,12 @@ use error::Error;
 pub mod ast;
 use ast::*;
 
-/// Short-hand version of Result<T, E> where E = Context<Error>
+/// Short-hand version of [Result], where E = [Context]
 type Result<T> = core::result::Result<T, Context<Error>>;
 
 /// Parser implementation, which consumes the scanner iterator.
+///
+/// This is implemented as an LL(1) recursive descent predictive parser.
 pub struct Parser {
     /// The inner Scanner iterator
     scanner: Scanner,
@@ -41,7 +48,7 @@ impl Parser {
     /// # Errors
     ///
     /// If the first token cannot be read (probably because of I/O) this function fails.
-    #[allow(clippy::missing_panics_doc)] // never panics, EOF is inserted if file is empty
+    #[allow(clippy::missing_panics_doc)] // never panics, EOF is inserted even if the file is empty
     pub fn new(mut scanner: Scanner, debug: bool, verbose: bool) -> Result<Self> {
         let token = scanner.next().unwrap()?;
 
@@ -62,46 +69,41 @@ impl Parser {
         self.nt_toy_c_program()
     }
 
-    /* Inner implementation, using an LL(1) recursive descent predictive parser */
+    /* Main implementation, based on the notes in class */
 
-    /// Fills the look ahead buffer with the next token.
+    /// Fills the look ahead buffer with a new token, returning the old one.
     ///
     /// # Panics
     ///
     /// Panics if called after the EOF marker.
-    fn load_next_token(&mut self) -> Result<()> {
-        let token = self.scanner.next().unwrap()?;
-        self.buffer = token;
-        Ok(())
+    fn take_unchecked(&mut self) -> Result<Token> {
+        let new_token = self.scanner.next().unwrap()?;
+
+        // swap in place to avoid cloning
+        let old_token = std::mem::replace(&mut self.buffer, new_token);
+
+        Ok(old_token)
     }
 
-    /// Takes a token from the buffer, reloading it and returning the token
-    fn take(&mut self, expected: Token) -> Result<Token> {
+    /// Same as [Self::take_unchecked], but also checks whether the token is the expected type.
+    ///
+    /// The justification here is that when there's only one path for the parser to take, this
+    /// function can be used to simplify the logic. When there are multiple, the other can be used
+    /// in a `match` statement.
+    fn take_checked(&mut self, expected: Token) -> Result<Token> {
         if self.buffer.syntax_eq(&expected) {
-            let token = self.buffer.clone();
-            self.load_next_token()?;
-            Ok(token)
+            self.take_unchecked()
         } else {
-            Err(self.error(vec![expected]))
+            Err(self.expected(&[expected]))
         }
     }
 
-    /// Gives context to an error
-    fn context(&self, e: Error) -> Context<Error> {
-        self.scanner.context(e)
-    }
-
-    /// Creates a syntax error
-    fn error(&self, expected: Vec<Token>) -> Context<Error> {
-        self.context(Error::SyntaxError {
-            got: self.buffer.clone(),
-            expected,
-        })
-    }
-
-    /// Creates a syntax error for a specific token
+    /// Constructs a syntax error
     fn expected(&self, expected: &[Token]) -> Context<Error> {
-        self.error(expected.to_owned())
+        self.scanner.context(Error::SyntaxError {
+            got: self.buffer.clone(),
+            expected: expected.to_owned(),
+        })
     }
 
     /// Prints debug messages
@@ -111,7 +113,7 @@ impl Parser {
         }
     }
 
-    /// ToyCProgram' <EOF>
+    /// `ToyCProgram' <EOF>`
     fn nt_toy_c_program(&mut self) -> Result<Program> {
         self.debug("entering ToyCProgram");
 
@@ -128,43 +130,47 @@ impl Parser {
         Ok(res)
     }
 
-    /// Definition ToyCProgram' | ε
+    /// `Definition ToyCProgram' | ε`
     fn nt_toy_c_program_(&mut self, definitions: &mut Vec<Definition>) -> Result<()> {
         self.debug("entering ToyCProgram'");
 
-        let res = match self.buffer {
+        match self.buffer {
             Keyword(Int | Char) => {
-                definitions.push(self.nt_definition()?);
+                let definition = self.nt_definition()?;
+                definitions.push(definition);
                 self.nt_toy_c_program_(definitions)
             }
             Eof => Ok(()),
             _ => Err(self.expected(&[Keyword(Int), Keyword(Char), Eof])),
-        };
+        }?;
 
         self.debug("Exiting ToyCProgram'");
-        res
+        Ok(())
     }
 
-    /// Type <identifier> Definition'
+    /// `Type <identifier> Definition'`
     fn nt_definition(&mut self) -> Result<Definition> {
         self.debug("entering Definition");
 
         let ast_type = self.nt_type()?;
-        let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        let id = self
+            .take_checked(Identifier(String::new()))?
+            .try_into()
+            .unwrap();
         let res = self.nt_definition_(ast_type, id)?;
 
         self.debug("exiting Definition");
         Ok(res)
     }
 
-    /// FunctionDefinition | <;>
+    /// `FunctionDefinition | <;>`
     fn nt_definition_(&mut self, ast_type: Type, id: String) -> Result<Definition> {
         self.debug("entering Definition'");
 
         let res = match self.buffer {
             LParen => self.nt_function_definition(ast_type, id),
             Semicolon => {
-                self.load_next_token()?;
+                self.take_unchecked()?;
                 Ok(Definition::Var(vec![id], ast_type))
             }
             _ => Err(self.expected(&[LParen, Semicolon])),
@@ -174,14 +180,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <int> | <char>
+    /// `<int> | <char>`
     fn nt_type(&mut self) -> Result<Type> {
         self.debug("entering Type");
 
         let res = match self.buffer {
             Keyword(Int) | Keyword(Char) => {
-                let ast_type = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let ast_type = self.take_unchecked()?.try_into().unwrap();
                 Ok(ast_type)
             }
             _ => Err(self.expected(&[Keyword(Int), Keyword(Char)])),
@@ -191,7 +196,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// FunctionHeader FunctionBody
+    /// `FunctionHeader FunctionBody`
     fn nt_function_definition(&mut self, ast_type: Type, id: String) -> Result<Definition> {
         self.debug("entering FunctionDefinition");
 
@@ -203,19 +208,19 @@ impl Parser {
         Ok(res)
     }
 
-    /// <(> FunctionHeader' <)>
+    /// `<(> FunctionHeader' <)>`
     fn nt_function_header(&mut self) -> Result<Vec<VarDef>> {
         self.debug("entering FunctionHeader");
 
-        self.take(LParen)?;
+        self.take_checked(LParen)?;
         let res = self.nt_function_header_()?;
-        self.take(RParen)?;
+        self.take_checked(RParen)?;
 
         self.debug("exiting FunctionHeader");
         Ok(res)
     }
 
-    /// FormalParamList | ε
+    /// `FormalParamList | ε`
     fn nt_function_header_(&mut self) -> Result<Vec<VarDef>> {
         self.debug("entering FunctionHeader'");
 
@@ -229,7 +234,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// CompoundStatement
+    /// `CompoundStatement`
     fn nt_function_body(&mut self) -> Result<Statement> {
         self.debug("entering FunctionBody");
 
@@ -239,12 +244,15 @@ impl Parser {
         Ok(res)
     }
 
-    /// Type <identifier> FormalParamList'
+    /// `Type <identifier> FormalParamList'`
     fn nt_formal_param_list(&mut self) -> Result<Vec<VarDef>> {
         self.debug("entering FormalParamList");
 
         let ast_type = self.nt_type()?;
-        let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+        let id = self
+            .take_checked(Identifier(String::new()))?
+            .try_into()
+            .unwrap();
         let mut res = vec![(vec![id], ast_type)];
         self.nt_formal_param_list_(&mut res)?;
 
@@ -252,15 +260,18 @@ impl Parser {
         Ok(res)
     }
 
-    /// <,> Type <identifier> FormalParamList' | ε
+    /// `<,> Type <identifier> FormalParamList' | ε`
     fn nt_formal_param_list_(&mut self, var_def: &mut Vec<VarDef>) -> Result<()> {
         self.debug("entering FormalParamList'");
 
         match self.buffer {
             Comma => {
-                self.take(Comma)?;
+                self.take_unchecked()?;
                 let ast_type = self.nt_type()?;
-                let id = self.take(Identifier(String::new()))?.try_into().unwrap();
+                let id = self
+                    .take_checked(Identifier(String::new()))?
+                    .try_into()
+                    .unwrap();
                 var_def.push((vec![id], ast_type));
                 self.nt_formal_param_list_(var_def)
             }
@@ -272,7 +283,7 @@ impl Parser {
         Ok(())
     }
 
-    /// ExpressionStatement
+    /// `ExpressionStatement
     ///  | BreakStatement
     ///  | CompoundStatement
     ///  | IfStatement
@@ -281,7 +292,7 @@ impl Parser {
     ///  | WhileStatement
     ///  | ReadStatement
     ///  | WriteStatement
-    ///  | NewLineStatement
+    ///  | NewLineStatement`
     fn nt_statement(&mut self) -> Result<Statement> {
         self.debug("entering Statement");
 
@@ -322,47 +333,47 @@ impl Parser {
         Ok(res)
     }
 
-    /// Expression <;>
+    /// `Expression <;>`
     fn nt_expression_statement(&mut self) -> Result<Statement> {
         self.debug("entering ExpressionStatement");
 
         let expression = self.nt_expression()?;
-        self.take(Semicolon)?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Expr(expression);
 
         self.debug("exiting ExpressionStatement");
         Ok(res)
     }
 
-    /// <break> <;>
+    /// `<break> <;>`
     fn nt_break_statement(&mut self) -> Result<Statement> {
         self.debug("entering BreakStatement");
 
-        self.take(Keyword(Break))?;
-        self.take(Semicolon)?;
+        self.take_checked(Keyword(Break))?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Break;
 
         self.debug("exiting BreakStatement");
         Ok(res)
     }
 
-    /// <{> CompoundStatement' CompoundStatement'' <}>
+    /// `<{> CompoundStatement' CompoundStatement'' <}>`
     fn nt_compound_statement(&mut self) -> Result<Statement> {
         self.debug("entering CompoundStatement");
 
-        self.take(LCurly)?;
+        self.take_checked(LCurly)?;
         let mut var_def = Vec::new();
         self.nt_compound_statement_(&mut var_def)?;
         let mut statements = Vec::new();
         self.nt_compound_statement__(&mut statements)?;
-        self.take(RCurly)?;
+        self.take_checked(RCurly)?;
         let res = Statement::Block(var_def, statements);
 
         self.debug("exiting CompoundStatement");
         Ok(res)
     }
 
-    /// Type <identifier> <;> CompoundStatement' | ε
+    /// `Type <identifier> <;> CompoundStatement' | ε`
     fn nt_compound_statement_(&mut self, var_def: &mut Vec<VarDef>) -> Result<()> {
         self.debug("entering CompoundStatement'");
 
@@ -370,12 +381,11 @@ impl Parser {
             Keyword(Int | Char) => {
                 let ast_type = self.nt_type()?;
                 let id = self
-                    .take(Identifier(String::new()))?
-                    .clone()
+                    .take_checked(Identifier(String::new()))?
                     .try_into()
                     .unwrap();
                 var_def.push((vec![id], ast_type));
-                self.take(Semicolon)?;
+                self.take_checked(Semicolon)?;
                 self.nt_compound_statement_(var_def)
             }
             Keyword(Read | Newline | Write | While | Break | Return | If)
@@ -416,7 +426,7 @@ impl Parser {
         Ok(())
     }
 
-    /// Statement CompoundStatement'' | ε
+    /// `Statement CompoundStatement'' | ε`
     fn nt_compound_statement__(&mut self, statements: &mut Vec<Statement>) -> Result<()> {
         self.debug("entering CompoundStatement''");
 
@@ -461,14 +471,14 @@ impl Parser {
         Ok(())
     }
 
-    /// <if> <(> Expression <)> Statement IfStatement'
+    /// `<if> <(> Expression <)> Statement IfStatement'`
     fn nt_if_statement(&mut self) -> Result<Statement> {
         self.debug("entering IfStatement");
 
-        self.take(Keyword(If))?;
-        self.take(LParen)?;
+        self.take_checked(Keyword(If))?;
+        self.take_checked(LParen)?;
         let expression = self.nt_expression()?;
-        self.take(RParen)?;
+        self.take_checked(RParen)?;
         let true_statement = Box::new(self.nt_statement()?);
         let false_statement = self.nt_if_statement_()?.map(Box::new);
         let res = Statement::If(expression, true_statement, false_statement);
@@ -477,13 +487,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <else> Statement | ε
+    /// `<else> Statement | ε`
     fn nt_if_statement_(&mut self) -> Result<Option<Statement>> {
         self.debug("entering IfStatement'");
 
         let res = match self.buffer {
             Keyword(Else) => {
-                self.take(Keyword(Else))?;
+                self.take_checked(Keyword(Else))?;
                 let statement = self.nt_statement()?;
 
                 Ok(Some(statement))
@@ -524,31 +534,31 @@ impl Parser {
         Ok(res)
     }
 
-    /// <;>
+    /// `<;>`
     fn nt_null_statement(&mut self) -> Result<Statement> {
         self.debug("entering NullStatement");
 
-        self.take(Semicolon)?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Null;
 
         self.debug("exitingNullStatement");
         Ok(res)
     }
 
-    /// <return> ReturnStatement' <;>
+    /// `<return> ReturnStatement' <;>`
     fn nt_return_statement(&mut self) -> Result<Statement> {
         self.debug("entering ReturnStatement");
 
-        self.take(Keyword(Return))?;
+        self.take_checked(Keyword(Return))?;
         let expression = self.nt_return_statement_()?;
-        self.take(Semicolon)?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Return(expression);
 
         self.debug("exiting ReturnStatement");
         Ok(res)
     }
 
-    /// Expression | ε
+    /// `Expression | ε`
     fn nt_return_statement_(&mut self) -> Result<Option<Expression>> {
         self.debug("entering ReturnStatement'");
 
@@ -575,14 +585,14 @@ impl Parser {
         Ok(res)
     }
 
-    /// <while> <(> Expression <)> Statement
+    /// `<while> <(> Expression <)> Statement`
     fn nt_while_statement(&mut self) -> Result<Statement> {
         self.debug("entering WhileStatement");
 
-        self.take(Keyword(While))?;
-        self.take(LParen)?;
+        self.take_checked(Keyword(While))?;
+        self.take_checked(LParen)?;
         let expression = self.nt_expression()?;
-        self.take(RParen)?;
+        self.take_checked(RParen)?;
         let statement = Box::new(self.nt_statement()?);
         let res = Statement::While(expression, statement);
 
@@ -590,37 +600,35 @@ impl Parser {
         Ok(res)
     }
 
-    /// <read> <(> <identifier> ReadStatement' <)> <;>
+    /// `<read> <(> <identifier> ReadStatement' <)> <;>`
     fn nt_read_statement(&mut self) -> Result<Statement> {
         self.debug("entering ReadStatement");
 
-        self.take(Keyword(Read))?;
-        self.take(LParen)?;
+        self.take_checked(Keyword(Read))?;
+        self.take_checked(LParen)?;
         let id = self
-            .take(Identifier(String::new()))?
-            .clone()
+            .take_checked(Identifier(String::new()))?
             .try_into()
             .unwrap();
         let mut ids = vec![id];
         self.nt_read_statement_(&mut ids)?;
-        self.take(RParen)?;
-        self.take(Semicolon)?;
+        self.take_checked(RParen)?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Read(ids);
 
         self.debug("exiting ReadStatement");
         Ok(res)
     }
 
-    /// <,> <identifier> ReadStatement' | ε
+    /// `<,> <identifier> ReadStatement' | ε`
     fn nt_read_statement_(&mut self, ids: &mut Vec<String>) -> Result<()> {
         self.debug("entering ReadStatement'");
 
         match self.buffer {
             Comma => {
-                self.take(Comma)?;
+                self.take_unchecked()?;
                 let id = self
-                    .take(Identifier(String::new()))?
-                    .clone()
+                    .take_checked(Identifier(String::new()))?
                     .try_into()
                     .unwrap();
                 ids.push(id);
@@ -634,34 +642,34 @@ impl Parser {
         Ok(())
     }
 
-    /// <write> <(> ActualParameters <)> <;>
+    /// `<write> <(> ActualParameters <)> <;>`
     fn nt_write_statement(&mut self) -> Result<Statement> {
         self.debug("entering WriteStatement");
 
-        self.take(Keyword(Write))?;
-        self.take(LParen)?;
+        self.take_checked(Keyword(Write))?;
+        self.take_checked(LParen)?;
         let params = self.nt_actual_parameters()?;
-        self.take(RParen)?;
-        self.take(Semicolon)?;
+        self.take_checked(RParen)?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Write(params);
 
         self.debug("exiting WriteStatement");
         Ok(res)
     }
 
-    /// <newline> <;>
+    /// `<newline> <;>`
     fn nt_newline_statement(&mut self) -> Result<Statement> {
         self.debug("entering NewlineStatement");
 
-        self.take(Keyword(Newline))?;
-        self.take(Semicolon)?;
+        self.take_checked(Keyword(Newline))?;
+        self.take_checked(Semicolon)?;
         let res = Statement::Newline;
 
         self.debug("exiting NewlineStatement");
         Ok(res)
     }
 
-    /// RelopExpression Expression'
+    /// `RelopExpression Expression'`
     fn nt_expression(&mut self) -> Result<Expression> {
         self.debug("entering Expression");
 
@@ -689,13 +697,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <assignop> RelopExpression Expression' | ε
+    /// `<assignop> RelopExpression Expression' | ε`
     fn nt_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("entering Expression'");
 
         let res = match self.buffer {
             AssignOp => {
-                self.take(AssignOp)?;
+                self.take_unchecked()?;
                 let rhs = self.nt_relop_expression()?;
                 let exp = Expression::Expr(Operator::Assign, Box::new(lhs), Box::new(rhs));
                 self.nt_expression_(exp)
@@ -708,7 +716,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// SimpleExpression RelopExpression'
+    /// `SimpleExpression RelopExpression'`
     fn nt_relop_expression(&mut self) -> Result<Expression> {
         self.debug("entering RelopExpression");
 
@@ -735,14 +743,13 @@ impl Parser {
         Ok(res)
     }
 
-    ///<relop> SimpleExpression RelopExpression' | ε
+    /// `<relop> SimpleExpression RelopExpression' | ε`
     fn nt_relop_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("entering RelopExpression'");
 
         let res = match self.buffer {
             RelOp(_) => {
-                let op = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let op = self.take_unchecked()?.try_into().unwrap();
                 let rhs = self.nt_simple_expression()?;
                 let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
                 self.nt_relop_expression_(exp)
@@ -766,7 +773,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// Term SimpleExpression'
+    /// `Term SimpleExpression'`
     fn nt_simple_expression(&mut self) -> Result<Expression> {
         self.debug("entering SimpleExpression");
 
@@ -793,14 +800,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <addop> Term SimpleExpression' | ε
+    /// `<addop> Term SimpleExpression' | ε`
     fn nt_simple_expression_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("entering SimpleExpression'");
 
         let res = match self.buffer {
             AddOp(_) => {
-                let op = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let op = self.take_unchecked()?.try_into().unwrap();
                 let rhs = self.nt_term()?;
                 let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
                 self.nt_relop_expression_(exp)
@@ -827,7 +833,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// Primary Term'
+    /// `Primary Term'`
     fn nt_term(&mut self) -> Result<Expression> {
         self.debug("entering Term");
 
@@ -853,14 +859,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <mulop> Primary Term' | ε
+    /// `<mulop> Primary Term' | ε`
     fn nt_term_(&mut self, lhs: Expression) -> Result<Expression> {
         self.debug("entering Term'");
 
         let res = match self.buffer {
             MulOp(_) => {
-                let op = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let op = self.take_unchecked()?.try_into().unwrap();
                 let rhs = self.nt_primary()?;
                 let exp = Expression::Expr(op, Box::new(lhs), Box::new(rhs));
                 self.nt_term_(exp)
@@ -892,43 +897,41 @@ impl Parser {
         Ok(res)
     }
 
-    /// Identifier Primary'
+    /// `Identifier Primary'
     /// | <Number>
     /// | <StringConstant>
     /// | <CharConstant>
     /// | <(> Expression <)>
     /// | <-> Primary
-    /// | <Not> Primary
+    /// | <Not> Primary`
     fn nt_primary(&mut self) -> Result<Expression> {
         self.debug("entering Primary");
 
         let res = match &self.buffer {
             Identifier(_) => {
-                let id = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let id = self.take_unchecked()?.try_into().unwrap();
                 self.nt_primary_(id)
             }
             Number(_) | StringLiteral(_) | CharLiteral(_) => {
-                let exp = self.buffer.clone().try_into().unwrap();
-                self.load_next_token()?;
+                let exp = self.take_unchecked()?.try_into().unwrap();
 
                 Ok(exp)
             }
             LParen => {
-                self.take(LParen)?;
+                self.take_unchecked()?;
                 let exp = self.nt_expression()?;
-                self.take(RParen)?;
+                self.take_checked(RParen)?;
 
                 Ok(exp)
             }
             AddOp(Sub) => {
-                self.take(AddOp(Sub))?;
+                self.take_unchecked()?;
                 let exp = self.nt_primary()?;
 
                 Ok(Expression::Minus(Box::new(exp)))
             }
             Not => {
-                self.take(Not)?;
+                self.take_unchecked()?;
 
                 Ok(Expression::Not(Box::new(self.nt_primary()?)))
             }
@@ -947,7 +950,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// FunctionCall | ε
+    /// `FunctionCall | ε`
     fn nt_primary_(&mut self, id: String) -> Result<Expression> {
         self.debug("entering Primary'");
 
@@ -986,15 +989,15 @@ impl Parser {
         Ok(res)
     }
 
-    /// <(> FunctionCall' <)>
+    /// `<(> FunctionCall' <)>`
     fn nt_function_call(&mut self) -> Result<Vec<Expression>> {
         self.debug("entering FunctionCall");
 
         let res = match self.buffer {
             LParen => {
-                self.take(LParen)?;
+                self.take_unchecked()?;
                 let expressions = self.nt_function_call_()?;
-                self.take(RParen)?;
+                self.take_checked(RParen)?;
                 Ok(expressions)
             }
 
@@ -1005,7 +1008,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// ActualParameters | ε
+    /// `ActualParameters | ε`
     fn nt_function_call_(&mut self) -> Result<Vec<Expression>> {
         self.debug("entering FunctionCall'");
 
@@ -1030,7 +1033,7 @@ impl Parser {
         Ok(res)
     }
 
-    /// Expression ActualParameters'
+    /// `Expression ActualParameters'`
     fn nt_actual_parameters(&mut self) -> Result<Vec<Expression>> {
         self.debug("entering ActualParameters");
 
@@ -1059,13 +1062,13 @@ impl Parser {
         Ok(res)
     }
 
-    /// <,> Expression ActualParameters' | ε
+    /// `<,> Expression ActualParameters' | ε`
     fn nt_actual_parameters_(&mut self, expressions: &mut Vec<Expression>) -> Result<()> {
         self.debug("entering ActualParameters'");
 
         match self.buffer {
             Comma => {
-                self.take(Comma)?;
+                self.take_unchecked()?;
                 let expression = self.nt_expression()?;
                 expressions.push(expression);
                 self.nt_actual_parameters_(expressions)

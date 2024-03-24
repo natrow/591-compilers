@@ -1,4 +1,6 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of token classes recognized by the scanner.
 
 use std::{fmt::Display, str::FromStr};
 
@@ -61,7 +63,7 @@ impl Keyword {
     ];
 
     /// Convert keyword into string literal (static allocation)
-    pub const fn to_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Keyword::Int => "int",
             Keyword::Do => "do",
@@ -115,7 +117,7 @@ impl FromStr for Keyword {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::VALUES
             .iter()
-            .find(|value| value.to_str() == s)
+            .find(|value| value.as_str() == s)
             .copied()
             .ok_or(())
     }
@@ -124,7 +126,7 @@ impl FromStr for Keyword {
 /// Used to print a keyword OR convert it into a heap-allocated `String`
 impl Display for Keyword {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str: &'static str = self.to_str();
+        let str: &'static str = self.as_str();
 
         write!(f, "{}", str)
     }
@@ -289,9 +291,9 @@ impl Token {
     /// Convert the token into string literal (static allocation)
     ///
     /// Note: this is only used for parser errors (aka syntax errors)
-    pub const fn to_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            Self::Keyword(k) => k.to_str(),
+            Self::Keyword(k) => k.as_str(),
             Self::Identifier(_) => "<identifier>",
             Self::Number(_) => "<number>",
             Self::CharLiteral(_) => "<char literal>",

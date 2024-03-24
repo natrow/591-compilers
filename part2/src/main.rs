@@ -31,12 +31,12 @@ struct Args {
     /// compilation process
     #[arg(short, long, value_enum)]
     debug: Option<DebugLevel>,
-    /// Display all information
-    #[arg(short, long)]
-    verbose: bool,
     /// Display the abstract syntax tree
     #[arg(short, long)]
     abstract_: bool,
+    /// Display all information
+    #[arg(short, long)]
+    verbose: bool,
     /// toyc source files
     input_files: Vec<PathBuf>,
 }

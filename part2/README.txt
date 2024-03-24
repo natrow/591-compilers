@@ -2,7 +2,13 @@ Nathan Rowan and Trevin Vaughan
 
 Instructions for running:
 ```sh
-cargo run -- --help
+cargo run -- [OPTIONS] [INPUT_FILES]...
+```
+
+Or alternatively:
+```sh
+cargo build
+./target/part2 [OPTIONS] [INPUT_FILES]...
 ```
 
 ```
@@ -21,6 +27,10 @@ Options:
           Possible values:
           - all:     All messages
           - scanner: Scanner messages only
+          - parser:  Parser messages only
+
+  -a, --abstract
+          Display the abstract syntax tree
 
   -v, --verbose
           Display all information
@@ -30,6 +40,7 @@ Options:
 
   -V, --version
           Print version
+
 ```
 
 To open crate documentation:

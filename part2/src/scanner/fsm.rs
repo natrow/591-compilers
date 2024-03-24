@@ -2,8 +2,7 @@
 //!
 //! Implementation note: originally we had used a boolean to represent
 //! that a character must be re-scanned. It became obvious that this is
-//! equivalent to `token.is_some()`. Of course this could be proven
-//! rigorously, but it will not be here.
+//! equivalent to `token.is_some()`, so the logic has been simplified.
 
 use std::str::FromStr;
 
@@ -13,8 +12,8 @@ use crate::scanner::token::*;
 /// Scanner implemented as a finite state machine. This module is private to ensure
 /// correct usage of the 'step' and 'finish' functions.
 ///
-/// Note: This FSM keeps no track of its location in a file, and therefore does NOT
-/// return a complete `Error<T>`, only the kind of error (or warning) that occurred.
+/// Note: This FSM keeps no track of its location in a file, only the kind of error
+/// (or warning) that occurred.
 #[derive(Default, Clone)]
 pub struct Fsm {
     /// Current state, represented as an 8-bit unsigned integer (max value: 34)
@@ -32,7 +31,7 @@ impl Fsm {
         Ok((None, None))
     }
 
-    /// Same as `Self::take_edge() but also pushes character to the stack`
+    /// Same as [Self::take_edge()] but also pushes character to the stack
     fn take_edge_and_push(
         &mut self,
         edge: u8,

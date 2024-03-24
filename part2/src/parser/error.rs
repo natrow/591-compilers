@@ -1,4 +1,6 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of an error type for the parser.
 
 use std::fmt::Display;
 
@@ -7,7 +9,7 @@ use crate::{
     scanner::{error::Error as ScannerError, token::Token},
 };
 
-/// Create a comma separated list of `T::to_string()`
+/// Create a comma separated list using [ToString::to_string]
 fn list_to_string<I: IntoIterator<Item = T>, T: Display>(list: I) -> String {
     let mut s = String::new();
     let mut iter = list.into_iter().peekable();
@@ -40,9 +42,9 @@ impl Display for Error {
             Self::SyntaxError { got, expected } => {
                 format!(
                     "invalid syntax, got: {}, expected{}: {}",
-                    got.to_str(),
+                    got.as_str(),
                     if expected.len() == 1 { "" } else { " one of" },
-                    list_to_string(expected.iter().map(|e| e.to_str()))
+                    list_to_string(expected.iter().map(|e| e.as_str()))
                 )
             }
             Self::ScannerError(e) => e.to_string(),

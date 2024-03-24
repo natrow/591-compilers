@@ -1,4 +1,6 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! The scanner, as implemented in part 1 of the project.
 
 use std::{fmt::Display, path::Path};
 
@@ -14,17 +16,17 @@ use error::{Error, Warning};
 use fsm::Fsm;
 use token::Token;
 
-/// Scanner implemented as an iterator. This combines both the FSM and the file
-/// buffer (also implemented as an iterator) and handles all the call-site logic
-/// and invariance for the FSM.
+/// Scanner implemented as an iterator. This combines both the FSM and the [FileBuffer]
+/// (also implemented as an iterator) and handles all the call-site logic and invariance
+/// for the FSM.
 ///
 /// Note: Rust iterators are lazily evaluated, so the file is only read and tokens
-/// are only scanned as needed by the call-site. If the parser is implemented
-/// as another iterator, then only a minimal amount of memory will be used.
+/// are only scanned as needed. Since the parser is implemented as an LL(1) recursive
+/// descent parser, there is a minimal amount of memory overhead.
 pub struct Scanner {
     /// Finite state machine that does actual scanning
     ///
-    /// This is an `Option<T>` because after an error or EOF it is set to `None`
+    /// This is an [Option] because after an error or EOF it is set to [None]
     fsm: Option<Fsm>,
     /// Whether or not to print debug information
     debug: bool,
@@ -62,8 +64,8 @@ impl Scanner {
         self.fsm.take().unwrap().finish()
     }
 
-    /// Attempts to make an EOF token, returning `Some(Ok(Token::Eof))` on the first
-    /// call and `None` on subsequent calls.
+    /// Attempts to make an EOF token, returning [Some(Ok(Token::Eof))] on the first
+    /// call and [None] on subsequent calls.
     fn make_eof_token(&mut self) -> Option<Token> {
         if !self.eof {
             self.eof = true;
@@ -106,7 +108,7 @@ impl Iterator for Scanner {
     /// - `Some(Ok(T))` indicates that the scanning happened with no errors
     /// - `Some(Error(T))` indicates that the scanner returned an error, and the
     ///    caller may either ignore this error or abort scanning. (Warnings are printed)
-    /// - `None` indicates that the scanner has completed scanning the file and the
+    /// - [None] indicates that the scanner has completed scanning the file and the
     ///   iterator may be discarded. It is crucial that this is not returned early.
     ///
     /// Every call must return one and only one value.

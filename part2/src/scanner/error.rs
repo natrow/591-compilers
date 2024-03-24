@@ -1,4 +1,6 @@
 //! EGRE 591 part2 - Nathan Rowan and Trevin Vaughan
+//!
+//! Implementation of an error type for the scanner.
 
 use std::{fmt::Display, io};
 
