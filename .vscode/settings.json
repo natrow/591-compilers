@@ -16,5 +16,8 @@
         "rustdoc",
         "toyc",
         "Trevin"
+    ],
+    "cSpell.ignorePaths": [
+        "*.jsm",
     ]
 }
