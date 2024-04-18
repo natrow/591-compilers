@@ -2,9 +2,11 @@
 //!
 //! Code generation implemented for part 3 of the project
 
+pub mod jsm;
+
 use std::collections::HashMap;
 
-use crate::parser::ast::{Definition, Expression, Program, Statement, Type as AstType};
+use crate::parser::ast::Type as AstType;
 
 /// Errors that can happen during code generation
 #[derive(Debug, Clone)]
@@ -31,6 +33,10 @@ pub enum Error {
     MissingVariable(String),
     /// Uses a type that isn't implemented
     TypeUnimplemented(AstType),
+    /// Assigns to something other than an identifier
+    InvalidAssign,
+    /// Character literals aren't implemented
+    CharLiteral(Option<char>),
 }
 
 /// Types of symbols in the symbol table
@@ -147,168 +153,4 @@ impl SymbolTable {
 
         Err(Error::MissingVariable(id.to_owned()))
     }
-}
-
-/// Generate code for a given ToyC program
-///
-/// # Errors
-///
-/// Generates semantic errors in the AST, see [Error].
-pub fn generate_code(ast: &Program, file_name: &str) -> Result<String, Error> {
-    let mut symbol_table = SymbolTable::new_global();
-    let mut code = String::new();
-    let mut method_count = 0;
-
-    code += &format!(".source {}\n", file_name);
-    code += ".class ToyC\n";
-    code += ".super java/lang/Object\n\n";
-
-    code += &format!("; >> METHOD {} <<\n", method_count);
-    code += ".method <init()V\n";
-    code += "    .limit stack 1\n";
-    code += "    .limit locals 1\n";
-    code += "    aload_0\n";
-    code += "    invokespecial java/lang/Object/<init>()V";
-    code += "    return\n";
-    code += ".end method\n\n";
-    method_count += 1;
-
-    for def in ast.0.iter() {
-        match def {
-            Definition::Func(id, return_type, args, body) => {
-                if id == "main" {
-                    code += &format!("; >> METHOD {} <<\n", method_count);
-
-                    symbol_table.new_func(id)?;
-
-                    // main must have signature int main()
-
-                    if !matches!(return_type, AstType::Int) {
-                        return Err(Error::InvalidReturn);
-                    }
-
-                    if !args.is_empty() {
-                        return Err(Error::InvalidSubroutineParameters);
-                    }
-
-                    // create method in jvm
-                    code += ".method public static main([Ljava/lang/String;)I\n";
-                    code += "    .limit stack 999\n"; // calculating stack size is optionals
-                    code += "    .limit locals 999\n";
-
-                    // todo: actual function body
-                    code += &generate_code_for_statement(body, &mut symbol_table)?;
-
-                    code += ".end method\n\n";
-                    method_count += 1;
-                } else {
-                    // implementing functions other than main is extra credit...
-                    return Err(Error::NonMainFunction(id.to_owned()));
-                }
-            }
-            Definition::Var(id, _) => return Err(Error::GlobalVariable(id[0].to_owned())),
-        }
-    }
-
-    if !symbol_table.get_function("main") {
-        return Err(Error::MissingMain);
-    }
-
-    Ok(code)
-}
-
-/// Generates code for a given statement in a ToyC program
-///
-/// # Errors
-///
-/// Generates semantic errors in the AST, see [Error].
-fn generate_code_for_statement(
-    statement: &Statement,
-    scope: &mut SymbolTable,
-) -> Result<String, Error> {
-    let mut code = String::new();
-
-    match statement {
-        Statement::Expr(_) => todo!(),
-        Statement::Break => return Err(Error::BreakStatement),
-        Statement::Block(vars, statements) => {
-            // create a new scope
-            let mut scope = scope.new_scope();
-
-            // add each variable identifier to the scope
-            for (ids, ast_type) in vars {
-                if !matches!(ast_type, AstType::Int) {
-                    return Err(Error::TypeUnimplemented(*ast_type));
-                }
-
-                for id in ids {
-                    scope.new_var(id)?;
-                }
-            }
-
-            // generate code for each statement
-            for statement in statements {
-                code += &generate_code_for_statement(statement, &mut scope)?;
-            }
-        }
-        Statement::If(_, _, _) => todo!(),
-        Statement::Null => (),
-        Statement::Return(val) => {
-            if let Some(val) = val {
-                todo!()
-            } else {
-                // all functions must return an int
-                return Err(Error::InvalidReturn);
-            }
-        }
-        Statement::While(_, _) => todo!(),
-        Statement::Read(args) => {
-            let scanner = scope.current_offset;
-            scope.current_offset += 1;
-
-            // construct a scanner
-            code += "    new java/util/Scanner\n";
-            code += "    dup\n";
-            // get standard input
-            code += "    getstatic java/lang/System/in Ljava/io/InputStream;\n";
-            // initialize scanner
-            code += "    invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V\n";
-            // store the scanner to the stack frame
-            code += &format!("    astore{}{}\n", sep(scanner), scanner);
-
-            for arg in args {
-                let var = scope.get_variable(arg)?;
-
-                // load the scanner
-                code += &format!("    aload{}{}\n", sep(scanner), scanner);
-                // read an integer
-                code += "invokevirtual java/util/Scanner/nextInt()I\n";
-                // store the integer
-                code += &format!("    istore{}{}\n", sep(var), var);
-            }
-        }
-        Statement::Write(_) => todo!(),
-        Statement::Newline => {
-            // get standard output
-            code += "    getstatic java/lang/System/out Ljava/io/PrintStream;\n";
-            // print a newline
-            code += "    invokevirtual java/io/PrintStream/println()V\n";
-        }
-    }
-
-    Ok(code)
-}
-
-/// Creates a separator for jvm instructions such as `astore_1`
-fn sep(offset: usize) -> char {
-    if offset < 4 {
-        '_'
-    } else {
-        ' '
-    }
-}
-
-/// Generates code for expressions. Leaves the result on the stack to be used in statements
-fn generate_code_for_expression(expression: &Expression, scope: &SymbolTable) -> Result<(), Error> {
-    todo!()
 }
