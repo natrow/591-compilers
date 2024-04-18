@@ -1,10 +1,16 @@
 {
     "cSpell.words": [
         "ADDOP",
+        "aload",
         "ASSIGNOP",
+        "astore",
         "CHARLITERAL",
         "EGRE",
+        "getstatic",
+        "invokevirtual",
+        "istore",
         "LCURLY",
+        "Ljava",
         "LPAREN",
         "MULOP",
         "Nonterminal",

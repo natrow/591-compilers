@@ -14,6 +14,7 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Parser as ClapParser, ValueEnum};
 use colored::Colorize;
 
+pub mod code_gen;
 pub mod context;
 pub mod file_buffer;
 pub mod parser;

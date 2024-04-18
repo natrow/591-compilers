@@ -24,11 +24,11 @@ impl TryFrom<Token> for Identifier {
 }
 
 /// The program, aka the top level of the AST
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program(pub Vec<Definition>);
 
 /// Definitions allowed in the AST
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Definition {
     /// a function definition
     Func(Identifier, Type, Vec<VarDef>, Statement),
@@ -39,7 +39,7 @@ pub enum Definition {
 /// All statements allowed in the AST
 ///
 /// Note: sub-statements must be heap-allocated to prevent infinitely sized types
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     /// An expression statement
     Expr(Expression),
@@ -66,7 +66,7 @@ pub enum Statement {
 /// All expressions allowed in the AST
 ///
 /// Note: sub-expressions must be heap-allocated to prevent infinitely sized types
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     /// A number
     Number(String),
@@ -100,7 +100,7 @@ impl TryFrom<Token> for Expression {
 }
 
 /// All binary operations allowed in the AST
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operator {
     /// +
     Add,
@@ -181,7 +181,7 @@ impl TryFrom<Token> for Operator {
 }
 
 /// Types allowed in the AST
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Type {
     /// Integers
     Int,
