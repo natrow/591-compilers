@@ -207,3 +207,20 @@ impl SymbolTable {
         Err(Error::MissingVariable(id.to_owned()))
     }
 }
+
+/// Creates labels and keeps track of the current label numbering
+struct LabelMaker(usize);
+
+impl LabelMaker {
+    /// Create a new instance
+    fn new() -> Self {
+        Self(0)
+    }
+
+    /// Create a new label
+    fn mk_label(&mut self) -> String {
+        let str = format!("Label_{}", self.0);
+        self.0 += 1;
+        str
+    }
+}

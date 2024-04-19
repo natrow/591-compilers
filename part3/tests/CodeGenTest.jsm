@@ -51,6 +51,44 @@
     invokevirtual java/io/PrintStream/println()V
     iload_0
     iload_1
+    if_icmple Label_0
+    iconst_0
+    goto Label_1
+Label_0:
+    iconst_1
+Label_1:
+    dup
+    istore_2
+    pop
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    ldc "c is "
+    invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    iload_2
+    invokevirtual java/io/PrintStream/print(I)V
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    invokevirtual java/io/PrintStream/println()V
+    iload_1
+    iload_0
+    if_icmple Label_2
+    iconst_0
+    goto Label_3
+Label_2:
+    iconst_1
+Label_3:
+    dup
+    istore_2
+    pop
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    ldc "c is "
+    invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    iload_2
+    invokevirtual java/io/PrintStream/print(I)V
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    invokevirtual java/io/PrintStream/println()V
+    iload_0
+    iload_1
     iload_0
     imul
     iadd
@@ -67,18 +105,18 @@
     invokevirtual java/io/PrintStream/println()V
     ldc 2
     dup
-    istore_2
+    istore_3
     pop
     getstatic java/lang/System/out Ljava/io/PrintStream;
     ldc "now b is "
     invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
     getstatic java/lang/System/out Ljava/io/PrintStream;
-    iload_2
+    iload_3
     invokevirtual java/io/PrintStream/print(I)V
     getstatic java/lang/System/out Ljava/io/PrintStream;
     invokevirtual java/io/PrintStream/println()V
     iload_0
-    iload_2
+    iload_3
     ldc 20
     imul
     isub
@@ -106,8 +144,8 @@
     dup
     getstatic java/lang/System/in Ljava/io/InputStream;
     invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V
-    astore_2
-    aload_2
+    astore_3
+    aload_3
     invokevirtual java/util/Scanner/nextInt()I
     istore_1
     getstatic java/lang/System/out Ljava/io/PrintStream;

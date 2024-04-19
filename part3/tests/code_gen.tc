@@ -3,12 +3,23 @@
 int main() {
     int a;
     int b;
+    int c;
 
     a = 10;
 
     b = 5;
 
     write("a is ", a, " and b is ", b);
+    newline;
+
+    c = (a <= b); // should be false
+
+    write("c is ", c);
+    newline;
+
+    c = (b <= a); // should be true
+    
+    write("c is ", c);
     newline;
 
     a = a + b * a; // should be 60

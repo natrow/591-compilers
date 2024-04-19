@@ -2,7 +2,7 @@
 //!
 //! Code generation for the Jasmin target (JVM)
 
-use super::{Error, SymbolTable};
+use super::{Error, LabelMaker, SymbolTable};
 use crate::parser::ast::{Definition, Expression, Operator, Program, Statement, Type as AstType};
 
 /// Generate code for a given ToyC program
@@ -19,6 +19,7 @@ pub fn generate_code(
     let mut symbol_table = SymbolTable::new_global();
     let mut code = String::new();
     let mut method_count = 0;
+    let mut label_maker = LabelMaker::new();
 
     // file headers
     code += "; created using EGRE-591 ToyC compiler by Nathan Rowan and Trevin Vaughan\n\n";
@@ -74,7 +75,12 @@ pub fn generate_code(
                     code += "    .limit locals 999\n";
 
                     // insert code generation
-                    code += &generate_code_for_statement(body, &mut symbol_table, dump_table)?;
+                    code += &generate_code_for_statement(
+                        body,
+                        &mut symbol_table,
+                        dump_table,
+                        &mut label_maker,
+                    )?;
 
                     // wrap up new function
                     code += ".end method\n\n";
@@ -106,12 +112,13 @@ fn generate_code_for_statement(
     statement: &Statement,
     scope: &mut SymbolTable,
     dump_table: bool,
+    label_maker: &mut LabelMaker,
 ) -> Result<String, Error> {
     let mut code = String::new();
 
     match statement {
         Statement::Expr(e) => {
-            let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+            let (new_code, is_int) = generate_code_for_expression(e, scope, label_maker)?;
 
             if !is_int {
                 return Err(Error::IncompatibleTypes);
@@ -143,14 +150,15 @@ fn generate_code_for_statement(
 
             // generate code for each statement
             for statement in statements {
-                code += &generate_code_for_statement(statement, &mut scope, dump_table)?;
+                code +=
+                    &generate_code_for_statement(statement, &mut scope, dump_table, label_maker)?;
             }
         }
         Statement::If(_, _, _) => todo!(),
         Statement::Null => (),
         Statement::Return(val) => {
             if let Some(val) = val {
-                let (new_code, is_int) = generate_code_for_expression(val, scope)?;
+                let (new_code, is_int) = generate_code_for_expression(val, scope, label_maker)?;
 
                 if !is_int {
                     return Err(Error::IncompatibleTypes);
@@ -191,7 +199,7 @@ fn generate_code_for_statement(
         }
         Statement::Write(expressions) => {
             for e in expressions {
-                let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+                let (new_code, is_int) = generate_code_for_expression(e, scope, label_maker)?;
 
                 code += "    getstatic java/lang/System/out Ljava/io/PrintStream;\n";
 
@@ -230,6 +238,7 @@ fn sep(offset: usize) -> char {
 fn generate_code_for_expression(
     expression: &Expression,
     scope: &SymbolTable,
+    label_maker: &mut LabelMaker,
 ) -> Result<(String, bool), Error> {
     let mut code = String::new();
 
@@ -261,7 +270,8 @@ fn generate_code_for_expression(
                         // get the variable from the scope
                         let offset = scope.get_variable(id)?;
                         // generate code for the rhs
-                        let (rhs_code, is_int) = generate_code_for_expression(rhs, scope)?;
+                        let (rhs_code, is_int) =
+                            generate_code_for_expression(rhs, scope, label_maker)?;
 
                         if !is_int {
                             return Err(Error::IncompatibleTypes);
@@ -277,8 +287,8 @@ fn generate_code_for_expression(
                 }
             } else {
                 // generate code for the left and right sides
-                let (lhs_code, lhs_is_int) = generate_code_for_expression(lhs, scope)?;
-                let (rhs_code, rhs_is_int) = generate_code_for_expression(rhs, scope)?;
+                let (lhs_code, lhs_is_int) = generate_code_for_expression(lhs, scope, label_maker)?;
+                let (rhs_code, rhs_is_int) = generate_code_for_expression(rhs, scope, label_maker)?;
 
                 if !lhs_is_int || !rhs_is_int {
                     return Err(Error::IncompatibleTypes);
@@ -296,19 +306,109 @@ fn generate_code_for_expression(
                     Operator::Mod => code += "    irem\n",
                     Operator::BoolOr => todo!(),
                     Operator::BoolAnd => todo!(),
-                    Operator::LtEq => todo!(),
-                    Operator::Lt => todo!(),
-                    Operator::Eq => todo!(),
-                    Operator::Gt => todo!(),
-                    Operator::GtEq => todo!(),
-                    Operator::Neq => todo!(),
+                    Operator::LtEq => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmple {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
+                    Operator::Lt => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmplt {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
+                    Operator::Eq => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmpeq {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
+                    Operator::Gt => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmpgt {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
+                    Operator::GtEq => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmpge {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
+                    Operator::Neq => {
+                        // label if jump taken
+                        let if_label = label_maker.mk_label();
+                        // label after conditional
+                        let end_label = label_maker.mk_label();
+                        // do comparison
+                        code += &format!("    if_icmpne {}\n", if_label);
+                        // false: load 0 and jump to end
+                        code += "    iconst_0\n";
+                        code += &format!("    goto {}\n", end_label);
+                        // true: load 1
+                        code += &format!("{}:\n", if_label);
+                        code += "    iconst_1\n";
+                        // end
+                        code += &format!("{}:\n", end_label);
+                    }
                     Operator::Assign => unreachable!(),
                 }
             }
         }
         // negate an integer
         Expression::Minus(e) => {
-            let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+            let (new_code, is_int) = generate_code_for_expression(e, scope, label_maker)?;
 
             if !is_int {
                 return Err(Error::IncompatibleTypes);
