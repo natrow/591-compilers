@@ -41,7 +41,7 @@ pub fn generate_code(
 
     // create main method (jvm entrypoint)
     code += ".method public static main([Ljava/lang/String;)V\n";
-    code += "    .limit stack 1\n"; // calculating stack size is optionals
+    code += "    .limit stack 1\n";
     code += "    .limit locals 1\n";
     code += &format!("    invokestatic {}/toyc_main()I\n", class_name);
     code += "    pop\n";
@@ -71,7 +71,7 @@ pub fn generate_code(
 
                     // create fake main method as toyc runtime entrypoint
                     code += ".method static toyc_main()I\n";
-                    code += "    .limit stack 999\n"; // calculating stack size is optionals
+                    code += "    .limit stack 999\n"; // calculating stack size is optional
                     code += "    .limit locals 999\n";
 
                     // insert code generation
@@ -245,6 +245,8 @@ fn generate_code_for_expression(
     match expression {
         // load a number constant
         Expression::Number(n) => {
+            // this is a catch-all for numeric constants, including negatives and large integers
+            // jasmin probably translates this to real jvm ops
             code += &format!("    ldc {}\n", n);
         }
         // load an identifier value
