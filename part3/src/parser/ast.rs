@@ -2,6 +2,8 @@
 //!
 //! Implementation of the Abstract Syntax Tree, which is created by the scanner.
 
+use std::fmt::Display;
+
 use crate::scanner::token::{AddOp, Keyword, MulOp, RelOp, Token};
 
 mod printing;
@@ -197,6 +199,15 @@ impl TryFrom<Token> for Type {
             Token::Keyword(Keyword::Int) => Ok(Type::Int),
             Token::Keyword(Keyword::Char) => Ok(Type::Char),
             _ => Err(()),
+        }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Char => write!(f, "char"),
         }
     }
 }

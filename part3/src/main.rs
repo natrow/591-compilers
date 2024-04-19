@@ -9,9 +9,10 @@
 #![warn(clippy::missing_panics_doc)]
 #![warn(clippy::missing_errors_doc)]
 
-use std::{path::PathBuf, process::ExitCode};
+use std::{fs::write, path::PathBuf, process::ExitCode};
 
 use clap::{Parser as ClapParser, ValueEnum};
+use code_gen::jsm::generate_code;
 use colored::Colorize;
 
 pub mod code_gen;
@@ -28,14 +29,26 @@ use scanner::Scanner;
 #[derive(Clone, PartialEq, Eq, ClapParser)]
 #[command(version, about)]
 struct Args {
-    /// Display messages that aid in tracing the
+    /// specifies class file name
+    #[arg(short, long)]
+    class: Option<String>,
+    /// specifies target file name
+    #[arg(short, long)]
+    output: Option<String>,
+    /// display messages that aid in tracing the
     /// compilation process
     #[arg(short, long, value_enum)]
     debug: Option<DebugLevel>,
-    /// Display the abstract syntax tree
+    /// dump the abstract syntax tree
     #[arg(short, long)]
     abstract_: bool,
-    /// Display all information
+    /// dump the symbol table(s)
+    #[arg(short, long)]
+    symbol: bool,
+    /// dump the generated program
+    #[arg(short, long)]
+    code: bool,
+    /// display all information
     #[arg(short, long)]
     verbose: bool,
     /// toyc source files
@@ -73,26 +86,55 @@ fn main() -> ExitCode {
     let debug_parser = matches!(args.debug, Some(DebugLevel::All | DebugLevel::Parser));
 
     for path in args.input_files {
-        // this is the Rust equivalent of the try-catch pattern
-        let try_catch = || {
+        // front-end of the compiler
+        let parse = || {
             let scanner = Scanner::new(&path, debug_scanner, verbose).map_err(ParserError::from)?;
 
             let parser = Parser::new(scanner, debug_parser, verbose)?;
 
             let ast = parser.parse()?;
 
+            if args.abstract_ {
+                println!("<< Abstract Syntax >>\n{}", ast)
+            }
+
             Ok::<Program, MaybeContext<ParserError>>(ast)
         };
 
-        match try_catch() {
-            Ok(ast) => {
-                if args.abstract_ {
-                    println!("<< Abstract Syntax >>\n{}", ast)
-                }
-            }
+        let ast = match parse() {
+            Ok(ast) => ast,
             Err(e) => {
                 eprintln!("{} {}", "[ERROR]".red(), e);
+                continue;
             }
+        };
+
+        // back-end of the compiler
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+
+        if args.symbol {
+            println!("<< Symbol Table(s) >>");
+        }
+
+        let code = match generate_code(
+            &ast,
+            file_name,
+            args.class.as_ref().unwrap_or(&String::from("ToyC")),
+            args.symbol,
+        ) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("{} {}", "[ERROR]".red(), e);
+                continue;
+            }
+        };
+
+        if args.code {
+            println!("<< Generated Code >>\n{}", code)
+        }
+
+        if let Some(output) = &args.output {
+            write(output, &code).unwrap();
         }
     }
 

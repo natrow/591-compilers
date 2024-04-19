@@ -10,33 +10,50 @@ use crate::parser::ast::{Definition, Expression, Operator, Program, Statement, T
 /// # Errors
 ///
 /// Generates semantic errors in the AST, see [Error].
-pub fn generate_code(ast: &Program, file_name: &str) -> Result<String, Error> {
+pub fn generate_code(
+    ast: &Program,
+    file_name: &str,
+    class_name: &str,
+    dump_table: bool,
+) -> Result<String, Error> {
     let mut symbol_table = SymbolTable::new_global();
     let mut code = String::new();
     let mut method_count = 0;
 
+    // file headers
+    code += "; created using EGRE-591 ToyC compiler by Nathan Rowan and Trevin Vaughan\n\n";
+
     code += &format!(".source {}\n", file_name);
-    code += ".class ToyC\n";
+    code += &format!(".class {}\n", class_name);
     code += ".super java/lang/Object\n\n";
 
+    // create <init> method
     code += &format!("; >> METHOD {} <<\n", method_count);
-    code += ".method <init()V\n";
+    code += ".method <init>()V\n";
     code += "    .limit stack 1\n";
     code += "    .limit locals 1\n";
     code += "    aload_0\n";
-    code += "    invokespecial java/lang/Object/<init>()V";
+    code += "    invokespecial java/lang/Object/<init>()V\n";
     code += "    return\n";
     code += ".end method\n\n";
     method_count += 1;
+
+    // create main method (jvm entrypoint)
+    code += ".method public static main([Ljava/lang/String;)V\n";
+    code += "    .limit stack 1\n"; // calculating stack size is optionals
+    code += "    .limit locals 1\n";
+    code += &format!("    invokestatic {}/toyc_main()I\n", class_name);
+    code += "    pop\n";
+    code += "    return\n";
+    code += ".end method\n\n";
+    method_count += 1;
+
+    code += "; begin ToyC code generation...\n\n";
 
     for def in ast.0.iter() {
         match def {
             Definition::Func(id, return_type, args, body) => {
                 if id == "main" {
-                    code += &format!("; >> METHOD {} <<\n", method_count);
-
-                    symbol_table.new_func(id)?;
-
                     // main must have signature int main()
 
                     if !matches!(return_type, AstType::Int) {
@@ -47,14 +64,19 @@ pub fn generate_code(ast: &Program, file_name: &str) -> Result<String, Error> {
                         return Err(Error::InvalidSubroutineParameters);
                     }
 
-                    // create method in jvm
-                    code += ".method public static main([Ljava/lang/String;)I\n";
+                    // setup for new function
+                    code += &format!("; >> METHOD {} <<\n", method_count);
+                    symbol_table.new_func(id)?;
+
+                    // create fake main method as toyc runtime entrypoint
+                    code += ".method static toyc_main()I\n";
                     code += "    .limit stack 999\n"; // calculating stack size is optionals
                     code += "    .limit locals 999\n";
 
-                    // todo: actual function body
-                    code += &generate_code_for_statement(body, &mut symbol_table)?;
+                    // insert code generation
+                    code += &generate_code_for_statement(body, &mut symbol_table, dump_table)?;
 
+                    // wrap up new function
                     code += ".end method\n\n";
                     method_count += 1;
                 } else {
@@ -65,6 +87,8 @@ pub fn generate_code(ast: &Program, file_name: &str) -> Result<String, Error> {
             Definition::Var(id, _) => return Err(Error::GlobalVariable(id[0].to_owned())),
         }
     }
+
+    code += "; end ToyC code generation\n";
 
     if !symbol_table.get_function("main") {
         return Err(Error::MissingMain);
@@ -81,12 +105,19 @@ pub fn generate_code(ast: &Program, file_name: &str) -> Result<String, Error> {
 fn generate_code_for_statement(
     statement: &Statement,
     scope: &mut SymbolTable,
+    dump_table: bool,
 ) -> Result<String, Error> {
     let mut code = String::new();
 
     match statement {
         Statement::Expr(e) => {
-            code += &generate_code_for_expression(e, scope)?;
+            let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+
+            if !is_int {
+                return Err(Error::IncompatibleTypes);
+            };
+
+            code += &new_code;
             code += "    pop\n"; // discard the result
         }
         Statement::Break => return Err(Error::BreakStatement),
@@ -105,16 +136,27 @@ fn generate_code_for_statement(
                 }
             }
 
+            // print the symbol table
+            if dump_table {
+                println!("{:#?}", scope);
+            }
+
             // generate code for each statement
             for statement in statements {
-                code += &generate_code_for_statement(statement, &mut scope)?;
+                code += &generate_code_for_statement(statement, &mut scope, dump_table)?;
             }
         }
         Statement::If(_, _, _) => todo!(),
         Statement::Null => (),
         Statement::Return(val) => {
             if let Some(val) = val {
-                code += &generate_code_for_expression(val, scope)?;
+                let (new_code, is_int) = generate_code_for_expression(val, scope)?;
+
+                if !is_int {
+                    return Err(Error::IncompatibleTypes);
+                };
+
+                code += &new_code;
                 code += "    ireturn\n";
             } else {
                 // all functions must return an int
@@ -142,12 +184,26 @@ fn generate_code_for_statement(
                 // load the scanner
                 code += &format!("    aload{}{}\n", sep(scanner), scanner);
                 // read an integer
-                code += "invokevirtual java/util/Scanner/nextInt()I\n";
+                code += "    invokevirtual java/util/Scanner/nextInt()I\n";
                 // store the integer
                 code += &format!("    istore{}{}\n", sep(var), var);
             }
         }
-        Statement::Write(_) => todo!(),
+        Statement::Write(expressions) => {
+            for e in expressions {
+                let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+
+                code += "    getstatic java/lang/System/out Ljava/io/PrintStream;\n";
+
+                code += &new_code;
+
+                if is_int {
+                    code += "    invokevirtual java/io/PrintStream/print(I)V\n";
+                } else {
+                    code += "    invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n";
+                }
+            }
+        }
         Statement::Newline => {
             // get standard output
             code += "    getstatic java/lang/System/out Ljava/io/PrintStream;\n";
@@ -169,10 +225,12 @@ fn sep(offset: usize) -> char {
 }
 
 /// Generates code for expressions. Leaves the result on the stack to be used in statements
+///
+/// Returns the code and a bool representing whether it's an integer or not
 fn generate_code_for_expression(
     expression: &Expression,
     scope: &SymbolTable,
-) -> Result<String, Error> {
+) -> Result<(String, bool), Error> {
     let mut code = String::new();
 
     match expression {
@@ -203,7 +261,13 @@ fn generate_code_for_expression(
                         // get the variable from the scope
                         let offset = scope.get_variable(id)?;
                         // generate code for the rhs
-                        code += &generate_code_for_expression(rhs, scope)?;
+                        let (rhs_code, is_int) = generate_code_for_expression(rhs, scope)?;
+
+                        if !is_int {
+                            return Err(Error::IncompatibleTypes);
+                        };
+
+                        code += &rhs_code;
                         // duplicate the result
                         code += "    dup\n";
                         // store one copy to the stack frame, leaving the other on the operator stack
@@ -213,8 +277,15 @@ fn generate_code_for_expression(
                 }
             } else {
                 // generate code for the left and right sides
-                code += &generate_code_for_expression(lhs, scope)?;
-                code += &generate_code_for_expression(rhs, scope)?;
+                let (lhs_code, lhs_is_int) = generate_code_for_expression(lhs, scope)?;
+                let (rhs_code, rhs_is_int) = generate_code_for_expression(rhs, scope)?;
+
+                if !lhs_is_int || !rhs_is_int {
+                    return Err(Error::IncompatibleTypes);
+                };
+
+                code += &lhs_code;
+                code += &rhs_code;
 
                 // consume the values
                 match op {
@@ -237,12 +308,23 @@ fn generate_code_for_expression(
         }
         // negate an integer
         Expression::Minus(e) => {
-            code += &generate_code_for_expression(e, scope)?;
+            let (new_code, is_int) = generate_code_for_expression(e, scope)?;
+
+            if !is_int {
+                return Err(Error::IncompatibleTypes);
+            };
+
+            code += &new_code;
             code += "    ineg\n";
         }
         // negate a boolean
         Expression::Not(_) => todo!(),
     }
 
-    Ok(code)
+    let integer = !matches!(
+        expression,
+        Expression::CharLiteral(_) | Expression::StringLiteral(_)
+    );
+
+    Ok((code, integer))
 }

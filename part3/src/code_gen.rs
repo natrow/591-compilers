@@ -4,7 +4,7 @@
 
 pub mod jsm;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::parser::ast::Type as AstType;
 
@@ -37,6 +37,59 @@ pub enum Error {
     InvalidAssign,
     /// Character literals aren't implemented
     CharLiteral(Option<char>),
+    /// Incompatible expression types
+    IncompatibleTypes,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::NonGlobalFunction(id) => {
+                write!(f, "function with identifier {} found in local scope", id)
+            }
+            Error::NameCollision(id) => write!(
+                f,
+                "identifier {} cannot be declared because it is already in use",
+                id
+            ),
+            Error::GlobalVariable(id) => write!(
+                f,
+                "global variable with identifier {} could not be declared in the global scope",
+                id
+            ),
+            Error::MissingMain => write!(f, "program is missing main function"),
+            Error::InvalidReturn => write!(f, "function returns nothing (expected int)"),
+            Error::InvalidSubroutineParameters => write!(f, "invalid subroutine parameters"),
+            Error::DivisionByZero => write!(f, "cannot divide by zero"),
+            Error::NonMainFunction(id) => write!(
+                f,
+                "function with identifier {} could not be declared because this is unimplemented",
+                id
+            ),
+            Error::BreakStatement => write!(
+                f,
+                "break statement could not be created because this is unimplemented"
+            ),
+            Error::MissingVariable(id) => {
+                write!(f, "identifier {} could not be found in local scope", id)
+            }
+            Error::TypeUnimplemented(ast_type) => write!(
+                f,
+                "type {} cannot be used because it is unimplemented",
+                ast_type
+            ),
+            Error::InvalidAssign => write!(f, "only variables can be assigned to"),
+            Error::CharLiteral(c) => write!(
+                f,
+                "char literal '{}' could not be made because it is unimplemented",
+                match c {
+                    Some(c) => c.to_string(),
+                    None => String::new(),
+                }
+            ),
+            Error::IncompatibleTypes => write!(f, "expressions use incompatible types"),
+        }
+    }
 }
 
 /// Types of symbols in the symbol table
@@ -62,21 +115,21 @@ struct TableEntry {
 /// The symbol table itself
 #[derive(Debug, Clone)]
 struct SymbolTable {
+    /// whether or not this is the global symbol table
+    global: bool,
     /// first available offset to be used
     current_offset: usize,
     /// actual table
     elements: HashMap<String, TableEntry>,
-    /// whether or not this is the global symbol table
-    global: bool,
 }
 
 impl SymbolTable {
     /// Create the top-level, global symbol table
     fn new_global() -> Self {
         Self {
+            global: true,
             current_offset: 0,
             elements: HashMap::new(),
-            global: true,
         }
     }
 
@@ -116,7 +169,7 @@ impl SymbolTable {
     fn new_var(&mut self, id: &str) -> Result<(), Error> {
         // cannot reuse name in the same scope
         if let Some(e) = self.elements.get(id) {
-            if !e.local {
+            if e.local {
                 return Err(Error::NameCollision(id.to_owned()));
             }
         }

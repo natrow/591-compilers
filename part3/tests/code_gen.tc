@@ -1,0 +1,50 @@
+// this is a test of ToyC code generation
+
+int main() {
+    int a;
+    int b;
+
+    a = 10;
+
+    b = 5;
+
+    write("a is ", a, " and b is ", b);
+    newline;
+
+    a = a + b * a; // should be 60
+
+    write("now a is ", a);
+    newline;
+
+    {
+        int b;
+
+        b = 2;
+
+        write("now b is ", b);
+        newline;
+
+        a = a - b * 20; // should be 20
+    }
+
+    write("now a is ", a, " and b is ", b);
+    newline;
+
+    // b should be 5 again
+
+    write("input new b: ");
+
+    read(b);
+
+    write("now b is ", b);
+    newline;
+
+    b = b * b;
+
+    write("now b is ", b);
+    newline;
+
+    write("done!");
+
+    return 0;
+}
