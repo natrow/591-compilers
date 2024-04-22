@@ -2,6 +2,8 @@
 //!
 //! Code generation for the Jasmin target (JVM)
 
+use std::intrinsics::mir::StaticMut;
+
 use super::{Error, LabelMaker, SymbolTable};
 use crate::parser::ast::{Definition, Expression, Operator, Program, Statement, Type as AstType};
 
@@ -154,7 +156,43 @@ fn generate_code_for_statement(
                     &generate_code_for_statement(statement, &mut scope, dump_table, label_maker)?;
             }
         }
-        Statement::If(_, _, _) => todo!(),
+        Statement::If(expression, statement, next_statement) => {
+            //generate code for boolean expression
+            let (expression_code, ndc) = generate_code_for_expression(expression, &scope, label_maker)?;
+            let mut scope = &mut scope.new_scope(); 
+            
+            if let Some(else_statement) = next_statement {
+                let else_lable = label_maker.mk_label();
+                let end_lable = label_maker.mk_label();
+    
+                code += &expression_code;
+                
+                //else
+                code += &format!("    ifeq {}\n", else_lable);
+    
+                //if code
+                code += &generate_code_for_statement(statement, scope, dump_table, label_maker)?;
+                code += &format!("    goto {}\n", end_lable);
+    
+                code += &format!("    {}\n", else_lable);
+                code += &generate_code_for_statement(else_statement, scope, dump_table, label_maker)?;
+                code += &format!("    {}\n", end_lable);
+            } else {
+                let end_lable = label_maker.mk_label();
+    
+                code += &expression_code;
+                
+                //end
+                code += &format!("    ifeq {}\n", end_lable);
+    
+                //if code
+                code += &generate_code_for_statement(statement, scope, dump_table, label_maker)?;
+                code += &format!("    {}", end_lable);
+            }
+            
+
+            
+        } 
         Statement::Null => (),
         Statement::Return(val) => {
             if let Some(val) = val {
@@ -171,7 +209,24 @@ fn generate_code_for_statement(
                 return Err(Error::InvalidReturn);
             }
         }
-        Statement::While(_, _) => todo!(),
+        Statement::While(expression, statement) => {
+            let (expression_code, ndc) = generate_code_for_expression(expression, &scope, label_maker)?;
+            let mut scope = &mut scope.new_scope(); 
+            let while_lable = label_maker.mk_label();
+            let end_lable = label_maker.mk_label();
+            
+            code += &format!("    {}\n", while_lable);
+            code += &expression_code;
+            
+            //end
+            code += &format!("    ifeq {}\n", end_lable);
+
+            //if code
+            code += &generate_code_for_statement(statement, scope, dump_table, label_maker)?;
+            code += &format!("    goto {}\n", while_lable);
+            code += &format!("    {}", end_lable);
+
+        },
         Statement::Read(args) => {
             let scanner = scope.current_offset;
             scope.current_offset += 1;
@@ -239,7 +294,7 @@ fn generate_code_for_expression(
     expression: &Expression,
     scope: &SymbolTable,
     label_maker: &mut LabelMaker,
-) -> Result<(String, bool), Error> {
+) -> Result<(String, bool, ), Error> {
     let mut code = String::new();
 
     match expression {
@@ -306,8 +361,8 @@ fn generate_code_for_expression(
                     Operator::Mul => code += "    imul\n",
                     Operator::Div => code += "    idiv\n",
                     Operator::Mod => code += "    irem\n",
-                    Operator::BoolOr => todo!(),
-                    Operator::BoolAnd => todo!(),
+                    Operator::BoolOr => code += "    ior\n",
+                    Operator::BoolAnd => code += "    iand\n",
                     Operator::LtEq => {
                         // label if jump taken
                         let if_label = label_maker.mk_label();
@@ -420,7 +475,18 @@ fn generate_code_for_expression(
             code += "    ineg\n";
         }
         // negate a boolean
-        Expression::Not(_) => todo!(),
+        Expression::Not(e) => {
+            let is_zero = label_maker.mk_label();
+            
+            code += &format!("    ifeq {}\n", is_zero);
+            let (new_code, is_int) = generate_code_for_expression(e, scope, label_maker)?;
+
+            if !is_int {
+                return Err(Error::IncompatibleTypes);
+            };
+
+            code += &format!("    {}\n", is_zero);
+        }
     }
 
     let integer = !matches!(
